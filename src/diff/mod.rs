@@ -8,9 +8,10 @@ use sha2::{Digest, Sha256};
 use walkdir::WalkDir;
 
 use crate::compression::gz2e;
-use crate::formats::iso;
+use crate::formats::{iso, rarc};
 
 const COPY_BUF_SIZE: usize = 1024 * 1024;
+const ARC_EXTENSION: &str = "arc";
 
 fn hash_disk_file(path: &Path) -> Result<String, String> {
     let mut file =
@@ -135,6 +136,117 @@ fn find_files_dir(folder_path: &Path) -> Result<PathBuf, String> {
     }
 }
 
+fn is_archive_path(path: &str) -> bool {
+    path.rsplit_once('.')
+        .is_some_and(|(_, ext)| ext.eq_ignore_ascii_case(ARC_EXTENSION))
+}
+
+fn build_rarc_hash_map(archive: &rarc::Rarc) -> HashMap<String, String> {
+    let mut out = HashMap::new();
+    for entry in &archive.file_entries {
+        if entry.is_dir {
+            continue;
+        }
+        let Some(parent_idx) = entry.parent_node_index else {
+            continue;
+        };
+        let Some(data) = entry.data.as_ref() else {
+            continue;
+        };
+        let node_path = archive.node_path(parent_idx);
+        let full_path = if node_path.is_empty() {
+            entry.name.clone()
+        } else {
+            format!("{}/{}", node_path, entry.name)
+        };
+        let mut hasher = Sha256::new();
+        hasher.update(data);
+        out.insert(full_path, hex::encode(hasher.finalize()));
+    }
+    out
+}
+
+fn build_archive_diff_detail(
+    iso_path: &Path,
+    folder_file_path: &Path,
+    rel_path: &str,
+) -> Result<String, String> {
+    let iso_bytes = iso::read_iso_file_bytes(iso_path, rel_path)?;
+    let folder_bytes = std::fs::read(folder_file_path).map_err(|e| {
+        format!(
+            "Failed to read folder archive {}: {e}",
+            folder_file_path.display()
+        )
+    })?;
+
+    let iso_archive = rarc::Rarc::parse(iso_bytes)
+        .ok_or_else(|| format!("Failed to parse ISO archive: {rel_path}"))?;
+    let folder_archive = rarc::Rarc::parse(folder_bytes)
+        .ok_or_else(|| format!("Failed to parse folder archive: {rel_path}"))?;
+
+    let iso_map = build_rarc_hash_map(&iso_archive);
+    let folder_map = build_rarc_hash_map(&folder_archive);
+
+    let mut added = Vec::new();
+    let mut changed = Vec::new();
+    let mut removed = Vec::new();
+
+    for (path, folder_hash) in &folder_map {
+        match iso_map.get(path) {
+            Some(iso_hash) if iso_hash != folder_hash => changed.push(path.clone()),
+            Some(_) => {}
+            None => added.push(path.clone()),
+        }
+    }
+
+    for path in iso_map.keys() {
+        if !folder_map.contains_key(path) {
+            removed.push(path.clone());
+        }
+    }
+
+    added.sort_unstable();
+    changed.sort_unstable();
+    removed.sort_unstable();
+
+    let mut output = String::new();
+    output.push_str("  ");
+    output.push_str(rel_path);
+    output.push('\n');
+
+    if added.is_empty() && changed.is_empty() && removed.is_empty() {
+        output.push_str("    no internal changes detected\n");
+        return Ok(output);
+    }
+
+    if !changed.is_empty() {
+        output.push_str("    changed:\n");
+        for path in changed {
+            output.push_str("      ");
+            output.push_str(&path);
+            output.push('\n');
+        }
+    }
+    if !added.is_empty() {
+        output.push_str("    added:\n");
+        for path in added {
+            output.push_str("      ");
+            output.push_str(&path);
+            output.push('\n');
+        }
+    }
+    if !removed.is_empty() {
+        output.push_str("    removed:\n");
+        for path in removed {
+            output.push_str("      ");
+            output.push_str(&path);
+            output.push('\n');
+        }
+    }
+
+    Ok(output)
+}
+
 fn diff_with_iso_path(iso_path: &Path, folder_path: &Path) -> Result<String, String> {
     let start = Instant::now();
 
@@ -164,6 +276,19 @@ fn diff_with_iso_path(iso_path: &Path, folder_path: &Path) -> Result<String, Str
     added.sort_unstable();
     changed.sort_unstable();
 
+    let mut archive_details = Vec::new();
+    for path in &changed {
+        if !is_archive_path(path) {
+            continue;
+        }
+        let folder_file_path = files_dir.join(path);
+        let detail = match build_archive_diff_detail(iso_path, &folder_file_path, path) {
+            Ok(detail) => detail,
+            Err(err) => format!("  {path}\n    failed to diff internal archive contents: {err}\n"),
+        };
+        archive_details.push(detail);
+    }
+
     if added.is_empty() && changed.is_empty() {
         let total = start.elapsed();
         return Ok(format!(
@@ -189,6 +314,12 @@ fn diff_with_iso_path(iso_path: &Path, folder_path: &Path) -> Result<String, Str
             output.push_str("  ");
             output.push_str(path);
             output.push('\n');
+        }
+    }
+    if !archive_details.is_empty() {
+        output.push_str("Archive internals:\n");
+        for detail in archive_details {
+            output.push_str(&detail);
         }
     }
 

@@ -151,6 +151,15 @@ fn hash_file_region(file: &mut File, offset: u64, size: u64) -> Result<String, S
     Ok(hex::encode(hasher.finalize()))
 }
 
+fn read_file_region(file: &mut File, offset: u64, size: u64) -> Result<Vec<u8>, String> {
+    file.seek(SeekFrom::Start(offset))
+        .map_err(|e| format!("Failed to seek ISO data: {e}"))?;
+    let mut out = vec![0u8; size as usize];
+    file.read_exact(&mut out)
+        .map_err(|e| format!("Failed to read ISO data: {e}"))?;
+    Ok(out)
+}
+
 pub fn build_iso_hash_map(iso_path: &Path) -> Result<HashMap<String, String>, String> {
     let parse_start = Instant::now();
     let files = parse_iso_files(iso_path)?;
@@ -192,4 +201,16 @@ pub fn build_iso_hash_map(iso_path: &Path) -> Result<HashMap<String, String>, St
     );
 
     Ok(out)
+}
+
+pub fn read_iso_file_bytes(iso_path: &Path, relative_path: &str) -> Result<Vec<u8>, String> {
+    let files = parse_iso_files(iso_path)?;
+    let target_path = format!("files/{relative_path}");
+    let file_entry = files
+        .iter()
+        .find(|entry| entry.path == target_path)
+        .ok_or_else(|| format!("File not found in ISO: {relative_path}"))?;
+
+    let mut iso_file = File::open(iso_path).map_err(|e| format!("Failed to open ISO: {e}"))?;
+    read_file_region(&mut iso_file, file_entry.offset, file_entry.size)
 }
