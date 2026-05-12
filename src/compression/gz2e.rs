@@ -5,7 +5,7 @@ Some GZ2E ISOs are actually stored with the GZ2E01 marker followed by the standa
 GameCube ISO structure. This appears to be the case with the Twilight Princess ISO.
 */
 
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom, Write};
 
 const MAGIC: &[u8; 4] = b"GZ2E";
 
@@ -13,8 +13,10 @@ pub fn is_gz2e(data: &[u8]) -> bool {
     data.len() >= 4 && &data[0..4] == MAGIC
 }
 
-pub fn decompress_gz2e<R: Read + Seek>(reader: &mut R) -> Result<Vec<u8>, String> {
-    // Read first 32 bytes to check the format
+pub fn decompress_gz2e<R: Read + Seek, W: Write>(
+    reader: &mut R,
+    writer: &mut W,
+) -> Result<(), String> {
     let mut header = [0u8; 32];
     reader
         .read_exact(&mut header)
@@ -49,30 +51,20 @@ pub fn decompress_gz2e<R: Read + Seek>(reader: &mut R) -> Result<Vec<u8>, String
     // If FST offset looks valid (not zero, reasonable size), this is likely a standard ISO
     // with a GZ2E wrapper, so we can just read it as-is
     if fst_offset > 0x1000 && fst_offset < 0x10000000 {
-        // Read entire file as decompressed data
         reader
             .seek(SeekFrom::Start(0))
             .map_err(|e| format!("Failed to seek to start: {e}"))?;
-
-        let mut output = Vec::new();
-        reader
-            .read_to_end(&mut output)
-            .map_err(|e| format!("Failed to read ISO data: {e}"))?;
-
-        return Ok(output);
+        std::io::copy(reader, writer).map_err(|e| format!("Failed to copy ISO data: {e}"))?;
+        return Ok(());
     }
-
-    // Otherwise, try full GZ2E block decompression
-    decompress_gz2e_blocks(reader, &header)
+    // Otherwise try full decompression via blocks
+    decompress_gz2e_blocks(reader, writer, &header)
 }
 
-fn decompress_gz2e_blocks<R: Read + Seek>(
+fn decompress_gz2e_blocks<R: Read + Seek, W: Write>(
     _reader: &mut R,
+    _writer: &mut W,
     _header: &[u8; 32],
-) -> Result<Vec<u8>, String> {
-    // TODO: Implement full GZ2E block decompression if needed
-    Err(
-        "This GZ2E format is not yet fully supported. Please decompress manually using Dolphin or wiimm tools."
-            .to_string(),
-    )
+) -> Result<(), String> {
+    Err("This GZ2E format is not yet fully supported. Please decompress manually using Dolphin or wiimm tools.".to_string())
 }
