@@ -6,7 +6,5 @@ edition = "2021"
 [dependencies]
 sha2 = "0.10"
 hex = "0.4"
-qmetaobject = "0.2"
 walkdir = "2.5"
-cstr = "0.2"
 flate2 = "1.0"

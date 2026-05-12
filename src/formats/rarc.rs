@@ -41,7 +41,8 @@ const FILE_ENTRY_TYPE_DIR: u8 = 0x02;
 // Sentinels
 const U32_SIZE: usize = 4;
 const INVALID_NODE_INDEX: u32 = 0xFFFF_FFFF;
-use super::bytes::{read_u16_be, read_u32_be};
+use crate::compression::yaz0;
+use crate::utils::{read_u16_be, read_u32_be};
 
 /// Represents a directory node inside a RARC archive. Some fields are public
 /// because callers may want to inspect names or indices.
@@ -94,8 +95,8 @@ impl Rarc {
 
         // Early handle compression to reduce nesting later.
         // If top-level compression is Yaz0, decompress using the sibling module.
-        if &data[0..RARC_MAGIC_LEN] == super::yaz0::MAGIC_YAZ0 {
-            data = match super::yaz0::yaz0_decompress(&data) {
+        if &data[0..RARC_MAGIC_LEN] == yaz0::MAGIC_YAZ0 {
+            data = match yaz0::yaz0_decompress(&data) {
                 Some(d) => d,
                 None => {
                     eprintln!("Failed to decompress Yaz0 archive");
