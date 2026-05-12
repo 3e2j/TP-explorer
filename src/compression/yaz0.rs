@@ -20,7 +20,7 @@ const BACKREF_COPY_LEN_BASE: usize = 2;
 const BACKREF_COPY_LEN_EXTENDED_SENTINEL: usize = 0;
 const BACKREF_COPY_LEN_EXTENDED_BASE: usize = 0x12;
 
-use crate::bytes::read_u32_be;
+use super::bytes::read_u32_be;
 
 pub fn yaz0_decompress(input: &[u8]) -> Option<Vec<u8>> {
     if input.len() < YAZ0_HEADER_SIZE || &input[0..MAGIC_YAZ0.len()] != MAGIC_YAZ0 {
