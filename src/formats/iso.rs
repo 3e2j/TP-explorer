@@ -19,11 +19,11 @@ struct FstEntry {
     size_or_next_index: u32,
 }
 
-#[derive(Debug)]
-struct IsoFileEntry {
-    path: String,
-    offset: u64,
-    size: u64,
+#[derive(Debug, Clone)]
+pub struct IsoFileEntry {
+    pub path: String,
+    pub offset: u64,
+    pub size: u64,
 }
 
 fn read_u32_be(bytes: &[u8], offset: usize) -> Option<u32> {
@@ -100,7 +100,7 @@ fn walk_directory(
     Ok(())
 }
 
-fn parse_iso_files(iso_path: &Path) -> Result<Vec<IsoFileEntry>, String> {
+pub fn parse_iso_files(iso_path: &Path) -> Result<Vec<IsoFileEntry>, String> {
     let mut file = File::open(iso_path).map_err(|e| format!("Failed to open ISO: {e}"))?;
     let fst_offset = read_u32_at(&mut file, FST_OFFSET_OFFSET)? as u64;
     let fst_size = read_u32_at(&mut file, FST_SIZE_OFFSET)? as usize;
