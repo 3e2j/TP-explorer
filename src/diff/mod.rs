@@ -4,7 +4,6 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use sha1::Sha1;
 use walkdir::WalkDir;
 
 use crate::formats::compression::gz2e;

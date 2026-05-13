@@ -3,9 +3,9 @@ Extract all .arc files from a directory to an output folder.
 Each ARC file's contents are extracted, preserving internal directory structure.
 */
 
+use crate::formats::rarc::Rarc;
 use std::fs;
 use std::path::Path;
-use crate::formats::rarc::Rarc;
 
 pub fn extract_arc_files(input_dir: &str, output_dir: &str) -> Result<Vec<String>, String> {
     let input_path = Path::new(input_dir);
@@ -60,8 +60,8 @@ fn extract_single_arc(
 
     println!("Extracting: {}", arc_path.display());
 
-    let data = fs::read(arc_path)
-        .map_err(|e| format!("Failed to read {}: {}", arc_path.display(), e))?;
+    let data =
+        fs::read(arc_path).map_err(|e| format!("Failed to read {}: {}", arc_path.display(), e))?;
 
     let rarc = Rarc::parse(data).ok_or(format!("Failed to parse RARC: {}", arc_path.display()))?;
 
@@ -89,14 +89,13 @@ fn extract_rarc_contents(
         let output_path = output_dir.join(&file_path);
 
         if let Some(parent) = output_path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create directory: {}", e))?;
+            fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {}", e))?;
         }
 
         if let Some(data) = &entry.data {
             fs::write(&output_path, data)
                 .map_err(|e| format!("Failed to write {}: {}", output_path.display(), e))?;
-            
+
             let relative_path = output_path
                 .strip_prefix(&output_dir)
                 .unwrap_or(&output_path)

@@ -25,23 +25,35 @@ pub fn read_u24_be(data: &[u8], offset: usize) -> Option<u32> {
     if offset + 3 > data.len() {
         return None;
     }
-    Some(((data[offset] as u32) << 16) | ((data[offset + 1] as u32) << 8) | (data[offset + 2] as u32))
+    Some(
+        ((data[offset] as u32) << 16)
+            | ((data[offset + 1] as u32) << 8)
+            | (data[offset + 2] as u32),
+    )
 }
 
 pub fn bytes_to_hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join("")
+    bytes
+        .iter()
+        .map(|b| format!("{:02x}", b))
+        .collect::<Vec<_>>()
+        .join("")
 }
 
 pub fn hex_to_bytes(hex_str: &str) -> Result<Vec<u8>, String> {
-    if hex_str.len() % 2 != 0 {
-        return Err("Hex string must have even length".to_string());
+    // Accept odd-length hex by padding a leading zero. This makes the importer
+    // more tolerant of accidental single-digit nibbles produced by editors.
+    let mut s = hex_str.to_string();
+    if s.len() % 2 != 0 {
+        s = format!("0{}", s);
     }
+
     let mut bytes = Vec::new();
-    for i in (0..hex_str.len()).step_by(2) {
-        let byte = u8::from_str_radix(&hex_str[i..i+2], 16)
-            .map_err(|e| format!("Invalid hex: {}", e))?;
+    for i in (0..s.len()).step_by(2) {
+        let chunk = &s[i..i + 2];
+        let byte = u8::from_str_radix(chunk, 16)
+            .map_err(|e| format!("Invalid hex '{}' at pos {}: {}", hex_str, i, e))?;
         bytes.push(byte);
     }
     Ok(bytes)
 }
-

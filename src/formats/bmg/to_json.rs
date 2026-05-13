@@ -37,12 +37,12 @@ pub fn bmg_to_json(bmg: &Bmg) -> Result<Value, String> {
 fn format_text_parts(parts: &[Vec<u8>], encoding: &str) -> Result<Vec<String>, String> {
     // First, concatenate all parts into a single message string
     let mut full_message = String::new();
-    
+
     for part in parts {
         if part.is_empty() {
             continue;
         }
-        
+
         if part[0] == 0x1A {
             // Escape sequence - convert to hex format inline
             full_message.push_str(&format!("{{{}}}", bytes_to_hex(part)));
@@ -53,10 +53,10 @@ fn format_text_parts(parts: &[Vec<u8>], encoding: &str) -> Result<Vec<String>, S
             full_message.push_str(&text_escaped);
         }
     }
-    
+
     // Now split on newlines to create the array
     let lines: Vec<String> = full_message.split('\n').map(|s| s.to_string()).collect();
-    
+
     // If we have no lines, return empty line
     if lines.is_empty() {
         Ok(vec![String::new()])
@@ -73,8 +73,8 @@ fn decode_text(bytes: &[u8], encoding: &str) -> Result<String, String> {
 }
 
 pub fn write_json(json: &Value, path: &str) -> Result<(), String> {
-    let json_str = serde_json::to_string_pretty(json)
-        .map_err(|e| format!("Serialize error: {}", e))?;
+    let json_str =
+        serde_json::to_string_pretty(json).map_err(|e| format!("Serialize error: {}", e))?;
     fs::write(path, json_str).map_err(|e| format!("Write error: {}", e))?;
     Ok(())
 }

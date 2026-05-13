@@ -5,7 +5,7 @@ BMG (Binary Message Graphics) files contain localized game text with support for
 multiple encodings and special control sequences.
 */
 
-use crate::utils::{read_u32_be, read_u16_be};
+use crate::utils::{read_u16_be, read_u32_be};
 
 const MAGIC_BMG: &[u8; 8] = b"MESGbmg1";
 const ENCODING_SHIFT_JIS: u32 = 0x03000000;
@@ -46,7 +46,7 @@ impl Bmg {
         let _filesize = read_u32_be(data, 8);
         let section_count = read_u32_be(data, 12) as usize;
         let encoding_val = read_u32_be(data, 16);
-        
+
         let encoding = match encoding_val {
             ENCODING_SHIFT_JIS => "shift-jis".to_string(),
             ENCODING_LATIN1 => "latin-1".to_string(),
@@ -62,7 +62,12 @@ impl Bmg {
                 return Err("Section header out of bounds".to_string());
             }
 
-            let magic = [data[offset], data[offset+1], data[offset+2], data[offset+3]];
+            let magic = [
+                data[offset],
+                data[offset + 1],
+                data[offset + 2],
+                data[offset + 3],
+            ];
             let section_size = read_u32_be(data, offset + 4) as usize;
             offset += 8;
 
@@ -126,10 +131,10 @@ impl Bmg {
         let mut output = Vec::new();
         output.extend_from_slice(MAGIC_BMG);
         output.extend_from_slice(&[0u8; 4]); // Placeholder filesize
-        
+
         let section_count = 3 + self.additional_sections.len();
         output.extend_from_slice(&(section_count as u32).to_be_bytes());
-        
+
         let encoding_val = match self.encoding.as_str() {
             "shift-jis" => ENCODING_SHIFT_JIS,
             "latin-1" => ENCODING_LATIN1,
@@ -161,7 +166,11 @@ impl Bmg {
     }
 }
 
-fn parse_messages(inf1: &[u8], dat1: &[u8], mid1: &[u8]) -> Result<(Vec<BmgMessage>, u16, u16), String> {
+fn parse_messages(
+    inf1: &[u8],
+    dat1: &[u8],
+    mid1: &[u8],
+) -> Result<(Vec<BmgMessage>, u16, u16), String> {
     if inf1.len() < 8 {
         return Err("INF1 too small".to_string());
     }
@@ -265,7 +274,11 @@ fn read_u24_be(data: &[u8], offset: usize) -> Option<u32> {
     if offset + 3 > data.len() {
         return None;
     }
-    Some(((data[offset] as u32) << 16) | ((data[offset + 1] as u32) << 8) | (data[offset + 2] as u32))
+    Some(
+        ((data[offset] as u32) << 16)
+            | ((data[offset + 1] as u32) << 8)
+            | (data[offset + 2] as u32),
+    )
 }
 
 fn write_inf1(out: &mut Vec<u8>, bmg: &Bmg) -> Result<(), String> {
@@ -322,12 +335,5 @@ fn write_section(out: &mut Vec<u8>, magic: &[u8; 4], data: &[u8]) -> Result<(), 
     out.extend_from_slice(magic);
     out.extend_from_slice(&((data.len() + 8) as u32).to_be_bytes());
     out.extend_from_slice(data);
-
-    let pos = out.len();
-    if pos % 32 != 0 {
-        let padding = 32 - (pos % 32);
-        out.extend_from_slice(&vec![0u8; padding]);
-    }
-
     Ok(())
 }

@@ -17,13 +17,13 @@ fn main() {
             }
             commands::export::run(&args[2], &args[3])
         }
-        "compile" => {
-            if args.len() < 5 {
-                eprintln!("Usage: arc_diff compile <mod_dir> <vanilla_iso> <output_iso>");
-                return;
-            }
-            commands::compile::run(&args[2], &args[3], &args[4])
-        }
+        // "build" => {
+        //     if args.len() < 5 {
+        //         eprintln!("Usage: arc_diff compile <mod_dir> <vanilla_iso> <output_folder>");
+        //         return;
+        //     }
+        //     commands::build::run(&args[2], &args[3], &args[4])
+        // }
         _ => {
             print_usage();
             return;

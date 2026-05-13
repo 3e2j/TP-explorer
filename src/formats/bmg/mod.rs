@@ -1,8 +1,7 @@
 pub mod parser;
-pub mod export;
-pub mod import;
+pub mod to_json;
+pub mod from_json;
 
 pub use parser::Bmg;
-pub use export::{bmg_to_json, write_json};
-pub use import::{json_to_bmg, read_json};
-
+pub use to_json::{bmg_to_json, write_json};
+pub use from_json::json_to_bmg;

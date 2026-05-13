@@ -12,6 +12,7 @@ pub struct BmgExportMeta {
     pub iso_path: String,
     pub arc_path: String,
     pub bmg_filename: String,
+    pub sha1: String,
 }
 
 pub fn export_bmg_from_iso(iso_path: &str, output_dir: &str) -> Result<Vec<BmgExportMeta>, String> {
@@ -74,7 +75,7 @@ fn export_single_bmg(
     let data = entry.data.as_ref().ok_or("No data for BMG")?;
 
     let bmg = Bmg::parse(data)?;
-    let json = crate::formats::bmg::export::bmg_to_json(&bmg)?;
+    let json = crate::formats::bmg::to_json::bmg_to_json(&bmg)?;
 
     // Build output path: output_dir/text/<arc_basename>/<internal_path>.json
     let arc_stem = Path::new(arc_path)
@@ -94,13 +95,27 @@ fn export_single_bmg(
         fs::create_dir_all(parent).map_err(|e| format!("Create dir failed: {}", e))?;
     }
 
-    crate::formats::bmg::export::write_json(&json, &out_path.to_string_lossy())?;
+    // Write JSON text and compute its SHA1
+    let json_str =
+        serde_json::to_string_pretty(&json).map_err(|e| format!("Serialize JSON failed: {}", e))?;
+    crate::formats::bmg::to_json::write_json(&json, &out_path.to_string_lossy())?;
 
     println!("    Exported: {}", out_path.display());
+
+    // Compute SHA-1 of the original BMG bytes for the manifest
+    let mut hasher = sha1::Sha1::new();
+    hasher.update(data);
+    let hash = hasher.digest().to_string();
+
+    // Compute SHA-1 of the exported JSON (so build can detect changes by comparing JSON hashes)
+    let mut jhasher = sha1::Sha1::new();
+    jhasher.update(json_str.as_bytes());
+
     exported.push(BmgExportMeta {
         iso_path: arc_path.to_string(),
         arc_path: arc_path.to_string(),
         bmg_filename: bmg_path.to_string(),
+        sha1: hash,
     });
 
     Ok(())
