@@ -17,13 +17,13 @@ fn main() {
             }
             commands::export::run(&args[2], &args[3])
         }
-        // "build" => {
-        //     if args.len() < 5 {
-        //         eprintln!("Usage: arc_diff compile <mod_dir> <vanilla_iso> <output_folder>");
-        //         return;
-        //     }
-        //     commands::build::run(&args[2], &args[3], &args[4])
-        // }
+        "build" => {
+            if args.len() < 5 {
+                eprintln!("Usage: arc_diff build <iso_path> <mod_dir> <output_dir>");
+                return;
+            }
+            commands::build::run(&args[3], &args[2], &args[4])
+        }
         _ => {
             print_usage();
             return;
@@ -47,7 +47,7 @@ fn print_usage() {
     println!("    Extract ISO files into human-readable folder structure");
     println!("    Generates manifest.json for mod resolution");
     println!();
-    println!("  arc_diff compile <mod_dir> <vanilla_iso> <output_iso>");
+    println!("  arc_diff build <iso_path> <mod_dir> <output_dir>");
     println!("    Build a patched ISO from a mod folder and vanilla ISO");
     println!("    Resolves mod files via manifest.json");
 }

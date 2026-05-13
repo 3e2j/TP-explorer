@@ -196,6 +196,19 @@ fn process_other_arc_files(
     other_entry_paths: &[String],
 ) -> Result<(), String> {
     for internal_path in other_entry_paths {
+        let entry = archive
+            .rarc
+            .file_entries
+            .iter()
+            .find(|e| !e.is_dir && rarc_entry_path(&archive.rarc, e) == *internal_path);
+
+        let Some(entry) = entry else {
+            continue;
+        };
+        let Some(data) = &entry.data else {
+            continue;
+        };
+
         // Generate a friendly path for reference (even though file isn't exported)
         let friendly_path = format!("{}/{}", archive.stem, internal_path);
 
@@ -204,6 +217,7 @@ fn process_other_arc_files(
             json!({
                 "archive": archive.iso_path,
                 "path": internal_path,
+                "sha1": { "base": sha1_hex(data) }
             }),
         );
     }

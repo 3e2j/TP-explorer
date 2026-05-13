@@ -22,6 +22,7 @@ impl PreparedIso {
     }
 }
 
+// Decompresses the file if gz2e
 pub fn prepare_for_export(iso_path: &Path) -> Result<PreparedIso, String> {
     let mut iso_file = File::open(iso_path).map_err(|e| format!("Failed to open ISO: {e}"))?;
     let mut magic = [0u8; 4];
