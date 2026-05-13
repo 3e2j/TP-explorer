@@ -2,7 +2,7 @@
 Import JSON back to BMG format.
 */
 
-use crate::formats::bmg::{Bmg, BmgMessage, BmgSection};
+use crate::formats::bmg::parser::{Bmg, BmgMessage, BmgSection};
 use crate::utils::hex_to_bytes;
 use serde_json::Value;
 use std::fs;
@@ -15,26 +15,36 @@ pub fn json_to_bmg(data: &Value) -> Result<Bmg, String> {
 
     let metadata = &messages_arr[0];
     let attr_len = metadata["Attribute Length"].as_u64().unwrap_or(8) as u16;
-    let unknown_mid = metadata["Unknown MID1 Value"].as_str()
+    let unknown_mid = metadata["Unknown MID1 Value"]
+        .as_str()
         .and_then(|s| u16::from_str_radix(s, 16).ok())
         .unwrap_or(0x1001);
-    let encoding = metadata["Encoding"].as_str().unwrap_or("shift-jis").to_string();
+    let encoding = metadata["Encoding"]
+        .as_str()
+        .unwrap_or("shift-jis")
+        .to_string();
 
     let mut bmg_msgs = Vec::new();
     let mut extra_sections = Vec::new();
 
     for entry in &messages_arr[1..] {
         if let Some(section_name) = entry.get("Section").and_then(|s| s.as_str()) {
-            let data_hex = entry.get("Data").and_then(|d| d.as_str()).ok_or("Missing data")?;
+            let data_hex = entry
+                .get("Data")
+                .and_then(|d| d.as_str())
+                .ok_or("Missing data")?;
             let data_bytes = hex_to_bytes(data_hex)?;
-            
+
             let mut magic = [0u8; 4];
             let name_bytes = section_name.as_bytes();
             if name_bytes.len() == 4 {
                 magic.copy_from_slice(name_bytes);
             }
-            
-            extra_sections.push(BmgSection { magic, data: data_bytes });
+
+            extra_sections.push(BmgSection {
+                magic,
+                data: data_bytes,
+            });
         } else {
             bmg_msgs.push(parse_message(entry)?);
         }
@@ -78,7 +88,7 @@ fn format_text_lines(lines: &[Value]) -> Result<Vec<Vec<u8>>, String> {
         let line_str = line.as_str().ok_or("Bad text line")?;
 
         if line_str.starts_with('{') && line_str.ends_with('}') {
-            let hex = &line_str[1..line_str.len()-1];
+            let hex = &line_str[1..line_str.len() - 1];
             parts.push(hex_to_bytes(hex)?);
         } else {
             let unescaped = line_str.replace("\\{", "{").replace("\\}", "}");

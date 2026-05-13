@@ -4,10 +4,10 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use sha2::{Digest, Sha256};
+use sha1::Sha1;
 use walkdir::WalkDir;
 
-use crate::compression::gz2e;
+use crate::formats::compression::gz2e;
 use crate::formats::iso;
 
 const COPY_BUF_SIZE: usize = 1024 * 1024;
@@ -16,7 +16,7 @@ const OUTPUT_DIR: &str = "output";
 fn hash_disk_file(path: &Path) -> Result<String, String> {
     let mut file =
         File::open(path).map_err(|e| format!("Failed to open file {}: {e}", path.display()))?;
-    let mut hasher = Sha256::new();
+    let mut hasher = sha1::Sha1::new();
     let mut buffer = vec![0u8; COPY_BUF_SIZE];
 
     loop {
@@ -29,7 +29,7 @@ fn hash_disk_file(path: &Path) -> Result<String, String> {
         hasher.update(&buffer[..n]);
     }
 
-    Ok(hex::encode(hasher.finalize()))
+    Ok(hasher.digest().to_string())
 }
 
 fn build_folder_hash_map(folder: &Path) -> Result<HashMap<String, String>, String> {

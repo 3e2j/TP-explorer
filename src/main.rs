@@ -1,7 +1,5 @@
-use arc_diff::arc_extractor;
-use arc_diff::exporter;
+use arc_diff::commands;
 use std::env;
-use std::path::PathBuf;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -11,79 +9,45 @@ fn main() {
         return;
     }
 
-    match args[1].as_str() {
-        "export-bmg" => {
+    let result = match args[1].as_str() {
+        "export" => {
             if args.len() < 4 {
-                eprintln!("Usage: arc_diff export-bmg <iso_path> <output_dir>");
+                eprintln!("Usage: arc_diff export <iso_path> <output_dir>");
                 return;
             }
-            let iso_path = &args[2];
-            let output_dir = &args[3];
-
-            println!("Exporting BMG files from {} to {}", iso_path, output_dir);
-            match exporter::export_bmg_from_iso(iso_path, output_dir) {
-                Ok(exported) => {
-                    println!("Successfully exported {} BMG files", exported.len());
-                }
-                Err(e) => {
-                    eprintln!("Export failed: {}", e);
-                }
-            }
+            commands::export::run(&args[2], &args[3])
         }
-        "extract-arc" => {
-            if args.len() < 4 {
-                eprintln!("Usage: arc_diff extract-arc <input_dir> <output_dir>");
+        "compile" => {
+            if args.len() < 5 {
+                eprintln!("Usage: arc_diff compile <mod_dir> <vanilla_iso> <output_iso>");
                 return;
             }
-            let input_dir = &args[2];
-            let output_dir = &args[3];
-
-            println!("Extracting ARC files from {} to {}", input_dir, output_dir);
-            match arc_extractor::extract_arc_files(input_dir, output_dir) {
-                Ok(files) => {
-                    println!("Successfully extracted {} files", files.len());
-                }
-                Err(e) => {
-                    eprintln!("Extraction failed: {}", e);
-                }
-            }
-        }
-        "diff" => {
-            if args.len() < 3 {
-                eprintln!("Usage: arc_diff diff <iso_path> <folder_path>");
-                return;
-            }
-            let iso_path = PathBuf::from(&args[2]);
-            let folder_path = PathBuf::from(&args[3]);
-
-            println!(
-                "Comparing ISO {} against folder {}...",
-                iso_path.display(),
-                folder_path.display()
-            );
-
-            match arc_diff::diff::diff_iso_files_against_folder(&iso_path, &folder_path) {
-                Ok(result) => println!("{}", result),
-                Err(err) => eprintln!("Error: {}", err),
-            }
+            commands::compile::run(&args[2], &args[3], &args[4])
         }
         _ => {
             print_usage();
+            return;
+        }
+    };
+
+    match result {
+        Ok(_) => println!("Command completed successfully"),
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
         }
     }
 }
 
 fn print_usage() {
+    println!("TP Explorer - Twilight Princess Modding Toolchain");
+    println!();
     println!("Usage:");
-    println!("  arc_diff test-bmg <bmg_file>");
-    println!("    Parse and output BMG file as JSON");
+    println!("  arc_diff export <iso_path> <output_dir>");
+    println!("    Extract ISO files into human-readable folder structure");
+    println!("    Generates manifest.json for mod resolution");
     println!();
-    println!("  arc_diff export-bmg <iso_path> <output_dir>");
-    println!("    Export BMG files from ISO to JSON in output directory");
-    println!();
-    println!("  arc_diff extract-arc <input_dir> <output_dir>");
-    println!("    Extract all ARC files in directory, preserving internal structure");
-    println!();
-    println!("  arc_diff diff <iso_path> <folder_path>");
-    println!("    Compare ISO files against folder");
+    println!("  arc_diff compile <mod_dir> <vanilla_iso> <output_iso>");
+    println!("    Build a patched ISO from a mod folder and vanilla ISO");
+    println!("    Resolves mod files via manifest.json");
 }

@@ -2,11 +2,11 @@
 Main ISO export pipeline: ISO → ARC → BMG → JSON
 */
 
-use crate::bmg_export;
 use crate::formats::bmg::Bmg;
 use crate::formats::iso;
 use crate::formats::rarc::Rarc;
 use std::fs;
+use std::path::Path;
 
 pub struct BmgExportMeta {
     pub iso_path: String,
@@ -42,9 +42,9 @@ fn process_arc_file(
     exported: &mut Vec<BmgExportMeta>,
 ) -> Result<(), String> {
     let rel_path = file.path.strip_prefix("files/").unwrap_or(&file.path);
-    let arc_data = iso::read_iso_file_bytes(std::path::Path::new(iso_path), rel_path)?;
+    let rarc_data = iso::read_iso_file_bytes(std::path::Path::new(iso_path), rel_path)?;
 
-    let rarc = Rarc::parse(arc_data).ok_or("Failed to parse RARC")?;
+    let rarc = Rarc::parse(rarc_data).ok_or("Failed to parse RARC")?;
 
     let bmg_files: Vec<_> = rarc
         .list_files()
@@ -74,14 +74,29 @@ fn export_single_bmg(
     let data = entry.data.as_ref().ok_or("No data for BMG")?;
 
     let bmg = Bmg::parse(data)?;
-    let json = bmg_export::bmg_to_json(&bmg)?;
+    let json = crate::formats::bmg::export::bmg_to_json(&bmg)?;
 
-    let out_name = bmg_path.replace(".bmg", "").replace('/', "_");
-    let out_path = format!("{}/{}.json", output_dir, out_name);
+    // Build output path: output_dir/text/<arc_basename>/<internal_path>.json
+    let arc_stem = Path::new(arc_path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or("Invalid arc path")?;
 
-    bmg_export::write_json(&json, &out_path)?;
+    let internal = bmg_path.trim_start_matches('/');
+    let internal_no_ext = internal.strip_suffix(".bmg").unwrap_or(internal);
 
-    println!("    Exported: {}", out_path);
+    let out_path = Path::new(output_dir)
+        .join("text")
+        .join(arc_stem)
+        .join(internal_no_ext.to_string() + ".json");
+
+    if let Some(parent) = out_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("Create dir failed: {}", e))?;
+    }
+
+    crate::formats::bmg::export::write_json(&json, &out_path.to_string_lossy())?;
+
+    println!("    Exported: {}", out_path.display());
     exported.push(BmgExportMeta {
         iso_path: arc_path.to_string(),
         arc_path: arc_path.to_string(),
@@ -91,24 +106,28 @@ fn export_single_bmg(
     Ok(())
 }
 
-fn find_entry_in_rarc<'a>(rarc: &'a Rarc, bmg_path: &str) -> Option<&'a crate::formats::rarc::FileEntry> {
+fn find_entry_in_rarc<'a>(
+    rarc: &'a Rarc,
+    bmg_path: &str,
+) -> Option<&'a crate::formats::rarc::FileEntry> {
     rarc.file_entries.iter().find(|e| {
         if e.is_dir {
             return false;
         }
-        e.parent_node_index.and_then(|parent| {
-            let node_path = rarc.node_path(parent);
-            let full = if node_path.is_empty() {
-                e.name.clone()
-            } else {
-                format!("{}/{}", node_path, e.name)
-            };
-            if full == bmg_path {
-                Some(true)
-            } else {
-                None
-            }
-        }).is_some()
+        e.parent_node_index
+            .and_then(|parent| {
+                let node_path = rarc.node_path(parent);
+                let full = if node_path.is_empty() {
+                    e.name.clone()
+                } else {
+                    format!("{}/{}", node_path, e.name)
+                };
+                if full == bmg_path {
+                    Some(true)
+                } else {
+                    None
+                }
+            })
+            .is_some()
     })
 }
-

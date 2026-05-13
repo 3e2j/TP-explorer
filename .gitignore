@@ -1,4 +1,7 @@
 dev/
 target/
-tests/
-resource_dasm-master/
+output/
+todo
+documentation/
+documentation/reference
+test-res/

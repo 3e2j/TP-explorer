@@ -4,7 +4,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 use std::time::Instant;
 
-use sha2::{Digest, Sha256};
+use sha1::Sha1;
 
 const FST_OFFSET_OFFSET: u64 = 0x424;
 const FST_SIZE_OFFSET: u64 = 0x428;
@@ -137,7 +137,7 @@ fn hash_file_region(file: &mut File, offset: u64, size: u64) -> Result<String, S
     file.seek(SeekFrom::Start(offset))
         .map_err(|e| format!("Failed to seek ISO data: {e}"))?;
     let mut remaining = size;
-    let mut hasher = Sha256::new();
+    let mut hasher = sha1::Sha1::new();
     let mut buffer = vec![0u8; COPY_BUF_SIZE];
 
     while remaining > 0 {
@@ -148,7 +148,7 @@ fn hash_file_region(file: &mut File, offset: u64, size: u64) -> Result<String, S
         remaining -= read_len as u64;
     }
 
-    Ok(hex::encode(hasher.finalize()))
+    Ok(hasher.digest().to_string())
 }
 
 fn read_file_region(file: &mut File, offset: u64, size: u64) -> Result<Vec<u8>, String> {

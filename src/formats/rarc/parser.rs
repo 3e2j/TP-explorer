@@ -41,7 +41,7 @@ const FILE_ENTRY_TYPE_DIR: u8 = 0x02;
 // Sentinels
 const U32_SIZE: usize = 4;
 const INVALID_NODE_INDEX: u32 = 0xFFFF_FFFF;
-use crate::compression::yaz0;
+use crate::formats::compression::yaz0;
 use crate::utils::{read_u16_be, read_u32_be};
 
 /// Represents a directory node inside a RARC archive. Some fields are public
