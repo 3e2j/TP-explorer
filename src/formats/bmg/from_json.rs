@@ -1,5 +1,5 @@
 use crate::formats::bmg::Bmg;
-use crate::utils::{hex_to_bytes};
+use crate::utils::hex_to_bytes;
 use serde_json::Value;
 
 use crate::formats::bmg::parser::BmgMessage;
@@ -54,8 +54,14 @@ pub fn json_to_bmg(val: &Value) -> Result<Bmg, String> {
         if parts.len() != 2 {
             return Err(format!("Invalid ID format: {}", id_str));
         }
-        let id = parts[0].trim().parse::<u32>().map_err(|e| format!("Invalid ID: {}", e))?;
-        let subid = parts[1].trim().parse::<u8>().map_err(|e| format!("Invalid subid: {}", e))?;
+        let id = parts[0]
+            .trim()
+            .parse::<u32>()
+            .map_err(|e| format!("Invalid ID: {}", e))?;
+        let subid = parts[1]
+            .trim()
+            .parse::<u8>()
+            .map_err(|e| format!("Invalid subid: {}", e))?;
 
         let attributes_hex = item
             .get("attributes")
@@ -80,7 +86,11 @@ pub fn json_to_bmg(val: &Value) -> Result<Bmg, String> {
 
         let text_parts = parse_full_message(&full, encoding)?;
 
-        messages.push(BmgMessage { id: (id, subid), attributes, text: text_parts });
+        messages.push(BmgMessage {
+            id: (id, subid),
+            attributes,
+            text: text_parts,
+        });
     }
 
     Ok(Bmg {
