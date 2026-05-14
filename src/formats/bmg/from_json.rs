@@ -1,36 +1,25 @@
 /*
 Convert JSON back to BMG binary format.
 
-The JSON format exported by bmg_to_json preserves all BMG data including:
-- Message IDs (as "group, msg_id" format where msg_id is 24-bit)
-- Message text (with escape sequences for control codes in {...})
-- Message attributes (16 bytes when attribute_length=20)
-- Additional sections (non-standard BMG sections like custom metadata)
-
 Attributes Format (16 bytes, when attribute_length = 20):
-  Byte 0:     Group (high byte, usually 0x00)
-  Byte 1:     Message ID (low byte)
-  Bytes 2-3:  Padding/Unused (0x00 0x00)
-  Bytes 4-15: Attribute Data
-    Byte 4:   Unknown (typically 0x02)
-    Byte 5:   Unknown (typically 0x10)
-    Byte 6:   Unknown (typically 0x01)
-    Byte 7:   Unknown (usually 0x00)
-    Byte 8:   Unknown (typically 0xff)
-    Byte 9:   Unknown
-    Byte 10:  Unknown
-    Byte 11:  Unknown
-    Byte 12:  Unknown
-    Byte 13:  Unknown
-    Byte 14:  Color/Style Flag (0x01 or 0x09 observed)
-    Byte 15:  Padding (usually 0x00)
-
-Note: Attributes are preserved as-is from the JSON export. The ID field
-stores the MID1 section values (24-bit ID + 8-bit subid), which is separate
-from the attribute bytes. Do not modify attributes[0:1] as they contain
-important format information already correctly encoded in the JSON.
+    Byte 1:     Group (high byte)
+    Byte 2:     Message ID (low byte)
+    Bytes 3-4:  event_label_id (triggers a save?)
+    Byte 5:   SE Speaker
+    Byte 6:   Text box display Style
+    Byte 7:   Text box printing Style (slow, fast, fade-in, etc...)
+    Byte 8:   Text box position
+    Byte 9:   Unknown flag (some kind of item id?)
+    Byte 10:  Line arrange (0 centered, 1 left/start pos the "box natural")
+    Byte 11:  SE Mood
+    Byte 12:  Camera ID
+    Byte 13:  Base animation
+    Byte 14:  Face animation
+    Byte 15:  Unknown flag
+    Byte 16:  Padding
 */
 
+use crate::formats::bmg::attributes::encode_attributes;
 use crate::formats::bmg::Bmg;
 use crate::utils::hex_to_bytes;
 use serde_json::Value;
@@ -96,11 +85,28 @@ pub fn json_to_bmg(val: &Value, encoding: &str) -> Result<Bmg, String> {
             .parse::<u8>()
             .map_err(|e| format!("Invalid subid: {}", e))?;
 
-        let attributes_hex = item
-            .get("attributes")
-            .and_then(|v| v.as_str())
-            .ok_or("Message missing attributes")?;
-        let attributes = hex_to_bytes(attributes_hex)?;
+        let mut attributes = match item.get("attributes") {
+            Some(Value::Object(_)) => {
+                encode_attributes(item.get("attributes").ok_or("Message missing attributes")?)?
+            }
+            Some(Value::String(attributes_hex)) => hex_to_bytes(attributes_hex)?,
+            Some(_) => return Err("Message attributes must be an object or hex string".to_string()),
+            None => return Err("Message missing attributes".to_string()),
+        };
+        if attributes.len() != 16 {
+            return Err(format!(
+                "Message attributes must be exactly 16 bytes, got {}",
+                attributes.len()
+            ));
+        }
+        let group = u8::try_from(id).map_err(|_| {
+            format!(
+                "ID group component must fit in one byte for attributes[0], got {}",
+                id
+            )
+        })?;
+        attributes[0] = group;
+        attributes[1] = subid;
 
         let text_arr = item
             .get("text")

@@ -2,6 +2,7 @@
 Export BMG to JSON format.
 */
 
+use crate::formats::bmg::attributes::decode_attributes;
 use crate::formats::bmg::Bmg;
 use crate::utils::bytes_to_hex;
 use serde_json::{json, Value};
@@ -17,7 +18,7 @@ pub fn bmg_to_json(bmg: &Bmg) -> Result<Value, String> {
         let text_lines = format_text_parts(&msg.text, &bmg.encoding)?;
         messages.push(json!({
             "ID": format!("{}, {}", msg.id.0, msg.id.1),
-            "attributes": bytes_to_hex(&msg.attributes),
+            "attributes": decode_attributes(&msg.attributes)?,
             "text": text_lines,
         }));
     }

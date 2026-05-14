@@ -1,3 +1,4 @@
+pub mod attributes;
 pub mod from_json;
 pub mod parser;
 pub mod to_json;
