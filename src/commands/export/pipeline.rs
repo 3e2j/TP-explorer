@@ -14,7 +14,7 @@ Stages:
 
 use crate::commands::export::consolidated_bmg::{BmgSource, ConsolidatedBmg};
 use crate::formats::bmg::Bmg;
-use crate::formats::iso;
+use crate::formats::iso::iso;
 use crate::formats::rarc::Rarc;
 use serde_json::{json, Map, Value};
 use std::fs;

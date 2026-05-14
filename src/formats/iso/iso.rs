@@ -24,6 +24,7 @@ pub struct IsoFileEntry {
     pub path: String,
     pub offset: u64,
     pub size: u64,
+    pub fst_index: usize, // FST entry index for direct FST updates
 }
 
 fn read_u32_be(bytes: &[u8], offset: usize) -> Option<u32> {
@@ -32,7 +33,7 @@ fn read_u32_be(bytes: &[u8], offset: usize) -> Option<u32> {
     Some(u32::from_be_bytes([slice[0], slice[1], slice[2], slice[3]]))
 }
 
-fn read_u32_at(file: &mut File, offset: u64) -> Result<u32, String> {
+pub fn read_u32_at(file: &mut File, offset: u64) -> Result<u32, String> {
     let mut buf = [0u8; 4];
     file.seek(SeekFrom::Start(offset))
         .map_err(|e| format!("Failed to seek ISO: {e}"))?;
@@ -93,6 +94,7 @@ fn walk_directory(
                 path: format!("{dir_path}/{name}"),
                 offset: entry.data_offset_or_parent as u64,
                 size: entry.size_or_next_index as u64,
+                fst_index: i, // Track the FST entry index
             });
             i += 1;
         }

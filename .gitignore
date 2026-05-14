@@ -2,6 +2,6 @@ dev/
 target/
 output/
 build/
-documentation/
 documentation/reference
+todo
 test-res/

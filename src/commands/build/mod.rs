@@ -16,12 +16,15 @@ mod hash_check;
 
 use std::path::Path;
 
-pub fn run(mod_dir: &str, iso_path: &str, output_dir: &str) -> Result<(), String> {
+pub fn run(mod_dir: &str, iso_path: &str, output_dir: &str, iso_output: Option<&str>) -> Result<(), String> {
     std::fs::create_dir_all(output_dir).map_err(|e| format!("Create output dir failed: {}", e))?;
 
     println!("Building mod: {}", mod_dir);
     println!("Source ISO: {}", iso_path);
     println!("Output directory: {}", output_dir);
+    if let Some(iso_out) = iso_output {
+        println!("ISO output: {}", iso_out);
+    }
 
     let mod_path = Path::new(mod_dir);
     let iso_path_p = Path::new(iso_path);
@@ -36,7 +39,7 @@ pub fn run(mod_dir: &str, iso_path: &str, output_dir: &str) -> Result<(), String
     println!("Compiled {} files", compiled.len());
 
     // Stage 3-5: Resolve .arc dependencies, extract, and assemble
-    assemble::build_archives(&compiled, iso_path_p, mod_path, output_path)?;
+    assemble::build_archives(&compiled, iso_path_p, mod_path, output_path, iso_output)?;
 
     println!(
         "Build complete. Output written to {}",

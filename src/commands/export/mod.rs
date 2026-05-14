@@ -7,12 +7,12 @@ High-level sequence:
 3) Write manifest.json from decoded entries
 */
 
+pub mod consolidated_bmg;
 mod iso_source;
 mod manifest;
 mod pipeline;
-pub mod consolidated_bmg;
 
-use crate::formats::iso;
+use crate::formats::iso::iso;
 use std::fs;
 use std::path::Path;
 

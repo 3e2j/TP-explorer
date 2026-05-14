@@ -7,7 +7,7 @@ Assembly stage: rebuild modified archives by:
 */
 
 use crate::commands::build::compile::CompiledFile;
-use crate::formats::iso;
+use crate::formats::iso::iso;
 use crate::formats::rarc::Rarc;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -21,6 +21,7 @@ pub fn build_archives(
     iso_path: &Path,
     mod_dir: &Path,
     output_dir: &Path,
+    iso_output: Option<&str>,
 ) -> Result<(), String> {
     // Load manifest to understand file->arc mapping
     let manifest_path = mod_dir.join("manifest.json");
@@ -49,16 +50,19 @@ pub fn build_archives(
         return Ok(());
     }
 
+    // Collect arc paths early for later use
+    let arc_paths: Vec<String> = arc_modifications.keys().cloned().collect();
+
     // Rebuild each modified arc
     let mut iso_file =
         std::fs::File::open(iso_path).map_err(|e| format!("Open ISO failed: {}", e))?;
     let iso_entries = iso::parse_iso_files(iso_path)?;
 
-    for (arc_iso_path, modifications) in arc_modifications {
+    for (arc_iso_path, modifications) in &arc_modifications {
         // Load original arc from ISO
         let arc_iso_entry = iso_entries
             .iter()
-            .find(|f| f.path == arc_iso_path)
+            .find(|f| f.path == *arc_iso_path)
             .ok_or(format!("Arc not found in ISO: {}", arc_iso_path))?;
 
         let arc_bytes =
@@ -95,6 +99,36 @@ pub fn build_archives(
         fs::write(&output_path, rebuilt_bytes).map_err(|e| format!("Write arc failed: {}", e))?;
 
         println!("  Rebuilt arc: {}", arc_iso_path);
+    }
+
+    // If iso_output is specified, rebuild ISO with the modified archives
+    if let Some(iso_out) = iso_output {
+        println!("\nRebuilding ISO with modified files...");
+
+        // Collect the rebuilt archives as replacements
+        let mut replacements = HashMap::new();
+        for arc_iso_path in &arc_paths {
+            let rebuilt_arc_path = output_dir.join(arc_iso_path);
+            if rebuilt_arc_path.exists() {
+                let arc_data = fs::read(&rebuilt_arc_path)
+                    .map_err(|e| format!("Failed to read rebuilt arc {}: {}", arc_iso_path, e))?;
+                replacements.insert(arc_iso_path.clone(), arc_data);
+            }
+        }
+
+        // Get all ISO files
+        let all_iso_files = iso::parse_iso_files(iso_path)?;
+
+        // Rebuild ISO with modified archives
+        let iso_out_path = Path::new(iso_out);
+        crate::formats::iso::iso_rebuild::rebuild_iso_with_files(
+            iso_path,
+            iso_out_path,
+            &replacements,
+            &all_iso_files,
+        )?;
+
+        println!("ISO rebuild complete: {}", iso_out);
     }
 
     Ok(())

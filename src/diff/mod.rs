@@ -7,7 +7,7 @@ use std::time::Instant;
 use walkdir::WalkDir;
 
 use crate::formats::compression::gz2e;
-use crate::formats::iso;
+use crate::formats::iso::iso;
 
 const COPY_BUF_SIZE: usize = 1024 * 1024;
 const OUTPUT_DIR: &str = "output";
