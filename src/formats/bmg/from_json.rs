@@ -161,8 +161,8 @@ fn parse_full_message(full: &str, encoding: &str) -> Result<Vec<Vec<u8>>, String
             let hex_data = hex_to_bytes(&hex_str)?;
             parts.push(hex_data);
         } else if ch == '\n' {
-            // Add newline marker
-            current.push(0x00);
+            // Add newline marker (ASCII)
+            current.push(0x0A);
         } else {
             // Encode character
             match encoding {
