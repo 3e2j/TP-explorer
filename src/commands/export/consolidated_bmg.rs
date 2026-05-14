@@ -72,7 +72,9 @@ impl ConsolidatedBmg {
 
     /// Convert back to individual BMG JSON formats
     /// Returns a HashMap of (archive_path, internal_path) -> (bmg_json, encoding)
-    pub fn to_individual_bmgs(json: &Value) -> Result<HashMap<(String, String), (Value, String)>, String> {
+    pub fn to_individual_bmgs(
+        json: &Value,
+    ) -> Result<HashMap<(String, String), (Value, String)>, String> {
         let mut result = HashMap::new();
 
         let sources = json

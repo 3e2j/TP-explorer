@@ -18,12 +18,59 @@ fn main() {
             commands::export::run(&args[2], &args[3])
         }
         "build" => {
-            if args.len() < 5 {
-                eprintln!("Usage: arc_diff build <iso_path> <mod_dir> <output_dir> [iso_output]");
+            if args.len() < 4 {
+                eprintln!(
+                    "Usage: arc_diff build <iso_path> <mod_dir> [output_dir] [--iso-output <iso_output>]"
+                );
                 return;
             }
-            let iso_output = args.get(5).map(|s| s.as_str());
-            commands::build::run(&args[3], &args[2], &args[4], iso_output)
+
+            let mut output_dir: Option<&str> = None;
+            let mut iso_output: Option<&str> = None;
+            let mut i = 4;
+
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--iso-output" => {
+                        if i + 1 >= args.len() {
+                            eprintln!(
+                                "Usage: arc_diff build <iso_path> <mod_dir> [output_dir] [--iso-output <iso_output>]"
+                            );
+                            return;
+                        }
+                        iso_output = Some(&args[i + 1]);
+                        i += 2;
+                    }
+                    "--help" | "-h" => {
+                        print_usage();
+                        return;
+                    }
+                    value if output_dir.is_none() => {
+                        output_dir = Some(value);
+                        i += 1;
+                    }
+                    value if iso_output.is_none() => {
+                        iso_output = Some(value);
+                        i += 1;
+                    }
+                    other => {
+                        eprintln!("Unexpected argument: {}", other);
+                        eprintln!(
+                            "Usage: arc_diff build <iso_path> <mod_dir> [output_dir] [--iso-output <iso_output>]"
+                        );
+                        return;
+                    }
+                }
+            }
+
+            if output_dir.is_none() && iso_output.is_none() {
+                eprintln!(
+                    "Usage: arc_diff build <iso_path> <mod_dir> [output_dir] [--iso-output <iso_output>]"
+                );
+                return;
+            }
+
+            commands::build::run(&args[3], &args[2], output_dir, iso_output)
         }
         _ => {
             print_usage();
@@ -48,8 +95,9 @@ fn print_usage() {
     println!("    Extract ISO files into human-readable folder structure");
     println!("    Generates manifest.json for mod resolution");
     println!();
-    println!("  arc_diff build <iso_path> <mod_dir> <output_dir> [iso_output]");
+    println!("  arc_diff build <iso_path> <mod_dir> [output_dir] [--iso-output <iso_output>]");
     println!("    Build a patched ISO from a mod folder and vanilla ISO");
-    println!("    Resolves mod files via manifest.json");
-    println!("    If iso_output is provided, directly create a patched ISO file at that path");
+    println!("    With output_dir only: just build");
+    println!("    With --iso-output only: build to a temp dir, export ISO, then clean up");
+    println!("    With both: build and export");
 }

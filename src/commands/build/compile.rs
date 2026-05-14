@@ -18,7 +18,7 @@ pub struct CompiledFile {
 }
 
 /// Compile all modified files (JSON→BMG, etc.)
-/// 
+///
 /// Special handling for text/messages.json (consolidated BMG format):
 /// - Parses consolidated format {version, sources}
 /// - Splits back into individual BMG files by source
@@ -40,10 +40,8 @@ pub fn compile_modified_files(
     if !consolidated_bmg_entries.is_empty() {
         // All consolidated entries should point to the same file
         let mod_path = &consolidated_bmg_entries[0].mod_path;
-        let bytes = fs::read(mod_path)
-            .map_err(|e| format!("Read messages.json failed: {}", e))?;
-        let json_str = String::from_utf8(bytes)
-            .map_err(|e| format!("JSON not UTF-8: {}", e))?;
+        let bytes = fs::read(mod_path).map_err(|e| format!("Read messages.json failed: {}", e))?;
+        let json_str = String::from_utf8(bytes).map_err(|e| format!("JSON not UTF-8: {}", e))?;
         let json_val: serde_json::Value = serde_json::from_str(&json_str)
             .map_err(|e| format!("Parse consolidated BMG JSON failed: {}", e))?;
 
@@ -51,7 +49,9 @@ pub fn compile_modified_files(
 
         // Only compile the sources that were explicitly marked as modified
         for mod_file in consolidated_bmg_entries {
-            if let (Some(archive), Some(path)) = (mod_file.archive.as_ref(), mod_file.internal_path.as_ref()) {
+            if let (Some(archive), Some(path)) =
+                (mod_file.archive.as_ref(), mod_file.internal_path.as_ref())
+            {
                 // Look up this specific source in the consolidated BMG
                 let key = (archive.clone(), path.clone());
                 if let Some((bmg_json, encoding)) = individual_bmgs.get(&key) {
@@ -59,7 +59,8 @@ pub fn compile_modified_files(
                     let compiled_bytes = bmg.to_bytes()?;
 
                     let mut source_mod_file = mod_file.clone();
-                    source_mod_file.friendly_path = format!("{}/{}", archive.trim_start_matches("files/"), path);
+                    source_mod_file.friendly_path =
+                        format!("{}/{}", archive.trim_start_matches("files/"), path);
 
                     compiled.push(CompiledFile {
                         mod_file: source_mod_file,
