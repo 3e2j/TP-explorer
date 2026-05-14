@@ -231,9 +231,12 @@ fn finalize_bmg_export(
         .sources
         .iter()
         .map(|src| {
-            let source_messages_json =
-                serde_json::to_vec_pretty(&serde_json::json!(src.messages)).unwrap_or_default();
-            let source_hash = sha1_hex(&source_messages_json);
+            let source_identity_json = serde_json::to_vec_pretty(&serde_json::json!({
+                "encoding": src.encoding,
+                "messages": src.messages
+            }))
+            .unwrap_or_default();
+            let source_hash = sha1_hex(&source_identity_json);
 
             json!({
                 "archive": src.archive,

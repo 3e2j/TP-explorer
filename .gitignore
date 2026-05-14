@@ -1,7 +1,4 @@
 dev/
 target/
-output/
+export/
 build/
-documentation/reference
-todo
-test-res/

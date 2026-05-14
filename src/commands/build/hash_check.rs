@@ -132,10 +132,13 @@ fn check_consolidated_bmg_changes(
     // Convert to individual BMGs and compute per-source hashes
     let individual_bmgs = ConsolidatedBmg::to_individual_bmgs(&consolidated)?;
 
-    for ((archive, path), (bmg_json, _encoding)) in individual_bmgs {
-        // Compute hash of this source's messages
-        let source_hash = serde_json::to_vec_pretty(&bmg_json)
-            .map_err(|e| format!("Serialize source BMG failed: {}", e))?;
+    for ((archive, path), (bmg_json, encoding)) in individual_bmgs {
+        // Compute hash of this source's editable identity (encoding + messages)
+        let source_hash = serde_json::to_vec_pretty(&serde_json::json!({
+            "encoding": encoding,
+            "messages": bmg_json
+        }))
+        .map_err(|e| format!("Serialize source BMG failed: {}", e))?;
         let new_hash = sha1_hex(&source_hash);
 
         // Look up original hash
