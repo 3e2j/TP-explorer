@@ -1,12 +1,12 @@
 # Architecture Overview
 
-High-level architecture for TP Explorer.
+High-level architecture for TPMT.
 
 ---
 
 ## Purpose
 
-TP Explorer bridges:
+TPMT bridges:
 - **Game-side formats** (ISO files, ARC archives, BMG binaries)
 - **Modder-side formats** (friendly folder paths, JSON text formats)
 

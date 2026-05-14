@@ -1,6 +1,6 @@
 # Twilight Princess Modding Toolchain
 
-TP Explorer is a modding toolchain for *The Legend of Zelda: Twilight Princess* (GameCube, GZ2E).
+Twilight Princess Modding Toolchain (TPMT) is a modding toolchain for *The Legend of Zelda: Twilight Princess* (GameCube, GZ2E).
 
 It supports:
 - **export**: extract a vanilla ISO into a modder-friendly folder
@@ -9,9 +9,9 @@ It supports:
 ## Quick usage
 
 ```bash
-tp-explorer export <iso_path> <output_dir>
-tp-explorer build <iso_path> <mod_dir> <output_dir>
-tp-explorer build <iso_path> <mod_dir> --iso-output <patched_iso_path>
+tpmt export <iso_path> <output_dir>
+tpmt build <iso_path> <mod_dir> <output_dir>
+tpmt build <iso_path> <mod_dir> --iso-output <patched_iso_path>
 ```
 
 ## Mod folder model

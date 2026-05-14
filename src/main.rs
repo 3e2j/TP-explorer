@@ -1,5 +1,5 @@
-use tp_explorer::commands;
 use std::env;
+use tpmt::commands;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -12,7 +12,7 @@ fn main() {
     let result = match args[1].as_str() {
         "export" => {
             if args.len() < 4 {
-                eprintln!("Usage: tp-explorer export <iso_path> <output_dir>");
+                eprintln!("Usage: tpmt export <iso_path> <output_dir>");
                 return;
             }
             commands::export::run(&args[2], &args[3])
@@ -20,7 +20,7 @@ fn main() {
         "build" => {
             if args.len() < 4 {
                 eprintln!(
-                    "Usage: tp-explorer build <iso_path> <mod_dir> [output_dir] [--iso-output <iso_output>]"
+                    "Usage: tpmt build <iso_path> <mod_dir> [output_dir] [--iso-output <iso_output>]"
                 );
                 return;
             }
@@ -34,7 +34,7 @@ fn main() {
                     "--iso-output" => {
                         if i + 1 >= args.len() {
                             eprintln!(
-                                "Usage: tp-explorer build <iso_path> <mod_dir> [output_dir] [--iso-output <iso_output>]"
+                                "Usage: tpmt build <iso_path> <mod_dir> [output_dir] [--iso-output <iso_output>]"
                             );
                             return;
                         }
@@ -56,7 +56,7 @@ fn main() {
                     other => {
                         eprintln!("Unexpected argument: {}", other);
                         eprintln!(
-                            "Usage: tp-explorer build <iso_path> <mod_dir> [output_dir] [--iso-output <iso_output>]"
+                            "Usage: tpmt build <iso_path> <mod_dir> [output_dir] [--iso-output <iso_output>]"
                         );
                         return;
                     }
@@ -65,7 +65,7 @@ fn main() {
 
             if output_dir.is_none() && iso_output.is_none() {
                 eprintln!(
-                    "Usage: tp-explorer build <iso_path> <mod_dir> [output_dir] [--iso-output <iso_output>]"
+                    "Usage: tpmt build <iso_path> <mod_dir> [output_dir] [--iso-output <iso_output>]"
                 );
                 return;
             }
@@ -88,14 +88,14 @@ fn main() {
 }
 
 fn print_usage() {
-    println!("TP Explorer - Twilight Princess Modding Toolchain");
+    println!("TPMT - Twilight Princess Modding Toolchain");
     println!();
     println!("Usage:");
-    println!("  tp-explorer export <iso_path> <output_dir>");
+    println!("  tpmt export <iso_path> <output_dir>");
     println!("    Extract ISO files into human-readable folder structure");
     println!("    Generates manifest.json for mod resolution");
     println!();
-    println!("  tp-explorer build <iso_path> <mod_dir> [output_dir] [--iso-output <iso_output>]");
+    println!("  tpmt build <iso_path> <mod_dir> [output_dir] [--iso-output <iso_output>]");
     println!("    Build a patched ISO from a mod folder and vanilla ISO");
     println!("    With output_dir only: just build");
     println!("    With --iso-output only: build to a temp dir, export ISO, then clean up");
