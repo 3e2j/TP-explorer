@@ -2,7 +2,7 @@ use serde_json::{json, Map, Value};
 
 const BOX_STYLES: &[(&str, u8)] = &[
     ("standard_dialogue", 0x00),
-    ("no_background_over_3d", 0x01),
+    ("no_background", 0x01),
     ("fullscreen_sign_forced_instant", 0x02),
     ("no_background_voiceless", 0x05),
     ("no_background_centered_credits", 0x07),

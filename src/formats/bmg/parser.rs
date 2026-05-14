@@ -8,8 +8,11 @@ multiple encodings and special control sequences.
 use crate::utils::{read_u16_be, read_u32_be};
 
 const MAGIC_BMG: &[u8; 8] = b"MESGbmg1";
+const ENCODING_LEGACY: u32 = 0x00000000;
+const ENCODING_WINDOWS_1252: u32 = 0x01000000;
+const ENCODING_UTF16: u32 = 0x02000000;
 const ENCODING_SHIFT_JIS: u32 = 0x03000000;
-const ENCODING_LATIN1: u32 = 0x01000000;
+const ENCODING_UTF8: u32 = 0x04000000;
 
 #[derive(Debug, Clone)]
 pub struct BmgMessage {
@@ -29,7 +32,6 @@ pub struct Bmg {
     pub encoding: String,
     pub messages: Vec<BmgMessage>,
     pub attribute_length: u16,
-    pub unknown_mid_value: u16,
     pub additional_sections: Vec<BmgSection>,
 }
 
@@ -48,8 +50,11 @@ impl Bmg {
         let encoding_val = read_u32_be(data, 16);
 
         let encoding = match encoding_val {
+            ENCODING_LEGACY => "legacy-bmg".to_string(),
+            ENCODING_WINDOWS_1252 => "windows-1252".to_string(),
+            ENCODING_UTF16 => "utf-16be".to_string(),
             ENCODING_SHIFT_JIS => "shift-jis".to_string(),
-            ENCODING_LATIN1 => "latin-1".to_string(),
+            ENCODING_UTF8 => "utf-8".to_string(),
             _ => "shift-jis".to_string(),
         };
 
@@ -115,14 +120,12 @@ impl Bmg {
         let dat1_data = dat1_data.ok_or("Missing DAT1 section")?;
         let mid1_data = mid1_data.ok_or("Missing MID1 section")?;
 
-        let (messages, attribute_length, unknown_mid_value) =
-            parse_messages(inf1_data, dat1_data, mid1_data)?;
+        let (messages, attribute_length) = parse_messages(inf1_data, dat1_data, mid1_data)?;
 
         Ok(Bmg {
             encoding,
             messages,
             attribute_length,
-            unknown_mid_value,
             additional_sections,
         })
     }
@@ -136,8 +139,11 @@ impl Bmg {
         output.extend_from_slice(&(section_count as u32).to_be_bytes());
 
         let encoding_val = match self.encoding.as_str() {
+            "legacy-bmg" => ENCODING_LEGACY,
+            "windows-1252" | "latin-1" => ENCODING_WINDOWS_1252,
+            "utf-16be" => ENCODING_UTF16,
             "shift-jis" => ENCODING_SHIFT_JIS,
-            "latin-1" => ENCODING_LATIN1,
+            "utf-8" => ENCODING_UTF8,
             _ => ENCODING_SHIFT_JIS,
         };
         output.extend_from_slice(&encoding_val.to_be_bytes());
@@ -166,11 +172,7 @@ impl Bmg {
     }
 }
 
-fn parse_messages(
-    inf1: &[u8],
-    dat1: &[u8],
-    mid1: &[u8],
-) -> Result<(Vec<BmgMessage>, u16, u16), String> {
+fn parse_messages(inf1: &[u8], dat1: &[u8], mid1: &[u8]) -> Result<(Vec<BmgMessage>, u16), String> {
     if inf1.len() < 8 {
         return Err("INF1 too small".to_string());
     }
@@ -214,13 +216,7 @@ fn parse_messages(
         });
     }
 
-    let unknown_mid_value = if mid1.len() >= 4 {
-        read_u16_be(mid1, 2)
-    } else {
-        0x1001
-    };
-
-    Ok((messages, attribute_length as u16, unknown_mid_value))
+    Ok((messages, attribute_length as u16))
 }
 
 fn parse_message_text(dat1: &[u8], start: usize) -> Result<Vec<Vec<u8>>, String> {
@@ -317,8 +313,7 @@ fn write_dat1(out: &mut Vec<u8>, bmg: &Bmg) -> Result<(), String> {
 
 fn write_mid1(out: &mut Vec<u8>, bmg: &Bmg) -> Result<(), String> {
     out.extend_from_slice(&(bmg.messages.len() as u16).to_be_bytes());
-    out.extend_from_slice(&bmg.unknown_mid_value.to_be_bytes());
-    out.extend_from_slice(&[0u8; 4]);
+    out.extend_from_slice(&[0u8; 6]);
 
     for msg in &bmg.messages {
         let (id, subid) = msg.id;

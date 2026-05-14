@@ -10,8 +10,7 @@ use std::fs;
 
 pub fn bmg_to_json(bmg: &Bmg) -> Result<Value, String> {
     let mut messages = vec![json!({
-        "Attribute Length": bmg.attribute_length,
-        "Unknown MID1 Value": format!("{:x}", bmg.unknown_mid_value),
+        "message_count": bmg.messages.len(),
     })];
 
     for msg in bmg.messages.iter() {
@@ -67,7 +66,7 @@ fn format_text_parts(parts: &[Vec<u8>], encoding: &str) -> Result<Vec<String>, S
 
 fn decode_text(bytes: &[u8], encoding: &str) -> Result<String, String> {
     match encoding {
-        "latin-1" => Ok(bytes.iter().map(|&b| b as char).collect()),
+        "windows-1252" | "latin-1" => Ok(bytes.iter().map(|&b| b as char).collect()),
         _ => Ok(String::from_utf8_lossy(bytes).to_string()),
     }
 }

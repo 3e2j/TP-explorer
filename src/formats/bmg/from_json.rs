@@ -33,19 +33,12 @@ pub fn json_to_bmg(val: &Value, encoding: &str) -> Result<Bmg, String> {
         return Err("Empty JSON".to_string());
     }
 
-    // First element contains attribute length and unknown mid value
+    // First element stores MID1 metadata we expose in JSON.
     let meta = &arr[0];
-    let attribute_length = meta
-        .get("Attribute Length")
+    let expected_message_count = meta
+        .get("message_count")
         .and_then(|v| v.as_u64())
-        .ok_or("Missing Attribute Length")? as u16;
-
-    let unknown_mid_value = meta
-        .get("Unknown MID1 Value")
-        .and_then(|v| v.as_str())
-        .ok_or("Missing Unknown MID1 Value")?;
-    let unknown_mid_value = u16::from_str_radix(unknown_mid_value, 16)
-        .map_err(|e| format!("Invalid Unknown MID1 Value hex: {}", e))?;
+        .ok_or("Missing message_count")?;
 
     let mut messages: Vec<BmgMessage> = Vec::new();
     let mut additional_sections: Vec<BmgSection> = Vec::new();
@@ -120,9 +113,6 @@ pub fn json_to_bmg(val: &Value, encoding: &str) -> Result<Bmg, String> {
         }
         let full = lines.join("\n");
 
-        // Default encoding (to_json doesn't store encoding)
-        let encoding = "shift-jis";
-
         let text_parts = parse_full_message(&full, encoding)?;
 
         messages.push(BmgMessage {
@@ -132,11 +122,18 @@ pub fn json_to_bmg(val: &Value, encoding: &str) -> Result<Bmg, String> {
         });
     }
 
+    if expected_message_count != messages.len() as u64 {
+        return Err(format!(
+            "message_count mismatch: metadata says {}, parsed {}",
+            expected_message_count,
+            messages.len()
+        ));
+    }
+
     Ok(Bmg {
         encoding: encoding.to_string(),
         messages,
-        attribute_length,
-        unknown_mid_value,
+        attribute_length: 20,
         additional_sections,
     })
 }
@@ -176,7 +173,7 @@ fn parse_full_message(full: &str, encoding: &str) -> Result<Vec<Vec<u8>>, String
                     let bytes = ch.to_string().into_bytes();
                     current.extend_from_slice(&bytes);
                 }
-                "latin-1" => {
+                "windows-1252" | "latin-1" => {
                     current.push(ch as u8);
                 }
                 _ => {
