@@ -120,7 +120,7 @@ pub fn yaz0_compress(input: &[u8]) -> Option<Vec<u8>> {
                 uncomp_offset += 1;
                 mask |= 0x80 >> bit;
 
-                // Look ahead for a better match at the *next* position — but
+                // Look ahead for a better match at the *next* position - but
                 // only when we are not already holding a reserved match.
                 // This mirrors Python's get_num_bytes_and_match_pos logic:
                 // reserve the next match only when it is >= current+2 and we
@@ -139,7 +139,7 @@ pub fn yaz0_compress(input: &[u8]) -> Option<Vec<u8>> {
                 if num_bytes >= 0x12 {
                     // 3-byte encoding: dist high byte (bits 8-11 only), dist
                     // low byte, then length - 0x12.
-                    // Python: dst.append((dist & 0xFF00) >> 8)  — keeps bits
+                    // Python: dst.append((dist & 0xFF00) >> 8)  - keeps bits
                     // 8-11 of dist in the low nibble of the first byte.
                     dst.push(((dist >> 8) & 0x0F) as u8);
                     dst.push((dist & 0xFF) as u8);

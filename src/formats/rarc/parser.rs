@@ -219,7 +219,7 @@ impl Rarc {
         write_u32_be(&mut header, 0x10, file_data.len() as u32);
         // 0x14: mram file data size (all files treated as MRAM here)
         write_u32_be(&mut header, 0x14, file_data.len() as u32);
-        // 0x18: aram file data size (0 — no ARAM files)
+        // 0x18: aram file data size (0 - no ARAM files)
         write_u32_be(&mut header, 0x18, 0u32);
         // 0x1C: unknown_1, always 0
 
@@ -245,7 +245,7 @@ impl Rarc {
             DATA_HDR_FILE_ENTRIES_LIST_OFFSET_FIELD,
             (file_entries_list_offset - data_header_offset) as u32,
         );
-        // 0x10: string_list_size — filled after we know where file data starts
+        // 0x10: string_list_size - filled after we know where file data starts
         write_u32_be(
             &mut data_header,
             DATA_HDR_STRING_LIST_OFFSET_FIELD,

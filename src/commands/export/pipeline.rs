@@ -1,17 +1,18 @@
 /*
 Decode pipeline for export.
 
-Sequence (add new decoders below by calling process_<format>_entries):
-1) All ISO entries are registered as direct ISO manifest entries
-2) ARC archive decoder
-3) BMG decoder (processes BMG files inside ARC archives)
-4) Future: add more decoders here (e.g., AW, DAE, etc.)
-
-BMG files are consolidated into a single text/messages.json file to avoid
-scattered JSON files across multiple directories.
+Stages:
+1) Parse ISO - register all unpackaged (non-arc) files as ISO manifest entries
+2) Unpack ARCs - recursively unpack all .arc files into a flat ArcEntry list;
+                 register all arcs (including nested) in the top-level arcs array
+3) Process arc entries - run format-specific decoders over the flat ArcEntry list:
+     a) Plain files  - register as archive manifest entries
+     b) BMG decoder  - consolidate all .bmg files into text/messages.json
+     // Future: c) AW decoder, d) DAE decoder, etc.
+4) Finalize - write consolidated output files and insert multi-source manifest entries
 */
 
-use crate::commands::export::consolidated_bmg::{ConsolidatedBmg, BmgSource};
+use crate::commands::export::consolidated_bmg::{BmgSource, ConsolidatedBmg};
 use crate::formats::bmg::Bmg;
 use crate::formats::iso;
 use crate::formats::rarc::Rarc;
@@ -20,17 +21,13 @@ use std::fs;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
-pub struct ProcessContext<'a> {
-    entries: &'a mut Map<String, Value>,
-    arcs: &'a mut Vec<String>,
-    output_dir: &'a Path,
-    consolidated_bmg: &'a mut ConsolidatedBmg,
-}
-
-struct ParsedArchive {
-    iso_path: String,
-    stem: String,
-    rarc: Rarc,
+/// A single file (non-arc) unpacked from within an ARC (or nested ARC).
+/// `top_level_arc` is always the ISO-addressable arc path.
+/// `internal_path` is the full path inside that arc, including any nested arc segments.
+struct ArcEntry {
+    top_level_arc: String,
+    internal_path: String,
+    data: Vec<u8>,
 }
 
 pub fn export_entries(
@@ -39,12 +36,14 @@ pub fn export_entries(
 ) -> Result<(Map<String, Value>, Vec<String>), String> {
     fs::create_dir_all(output_dir).map_err(|e| format!("Create dir failed: {}", e))?;
 
+    // Parse ISO
     let files = iso::parse_iso_files(iso_path)?;
-    let mut entries = Map::new();
-    let mut arcs = Vec::new();
     let mut iso_file =
         std::fs::File::open(iso_path).map_err(|e| format!("Failed to open ISO: {e}"))?;
-    let mut consolidated_bmg = ConsolidatedBmg::new();
+
+    let mut entries = Map::new();
+    let mut arcs: Vec<String> = Vec::new();
+    let mut arc_entries: Vec<ArcEntry> = Vec::new();
 
     for file in files {
         let rel_iso_path = file
@@ -54,139 +53,165 @@ pub fn export_entries(
             .to_string();
         let bytes = read_iso_entry_bytes(&mut iso_file, file.offset, file.size)?;
 
-        insert_direct_iso_entry(&mut entries, &rel_iso_path, &bytes);
-
-        // Single ARC parse pass: build type-specific entry stacks for bulk processing
         if file.path.ends_with(".arc") {
-            let rarc = match Rarc::parse(bytes.clone()) {
-                Some(r) => r,
-                None => {
-                    eprintln!("  Warning: failed to parse ARC {}", file.path);
-                    continue;
-                }
-            };
-
-            let stem = match archive_stem(&file.path) {
-                Ok(s) => s,
-                Err(_) => continue,
-            };
-
-            let archive = ParsedArchive {
-                iso_path: file.path.clone(),
-                stem,
-                rarc,
-            };
-
-            // Track this arc
-            arcs.push(archive.iso_path.clone());
-
-            // Organize entries by type during single parse pass
-            let mut bmg_entries = Vec::new();
-            let mut other_entries = Vec::new();
-            // Future: build other type stacks here (aw_entries, dae_entries, etc.)
-
-            for entry in &archive.rarc.file_entries {
-                if entry.is_dir {
-                    continue;
-                }
-                let Some(_data) = &entry.data else {
-                    continue;
-                };
-
-                let internal_path = rarc_entry_path(&archive.rarc, entry);
-
-                if internal_path.ends_with(".bmg") {
-                    bmg_entries.push(internal_path);
-                } else {
-                    // Collect all other files for manifest
-                    other_entries.push(internal_path);
-                }
-                // Future: add other type checks here
-            }
-
-            // Process all organized entry stacks in bulk
-            let mut ctx = ProcessContext {
-                entries: &mut entries,
-                arcs: &mut arcs,
-                output_dir,
-                consolidated_bmg: &mut consolidated_bmg,
-            };
-
-            process_bmg_entries(&mut ctx, &archive, &bmg_entries)?;
-            process_other_arc_files(&mut ctx, &archive, &other_entries)?;
-            // Future: call process_aw_entries_bulk(&mut ctx, &archive, &aw_entries)?;
+            // Unpack ARCs recursively - handled below
+            unpack_arc(
+                &file.path,
+                &file.path,
+                "",
+                &bytes,
+                &mut arcs,
+                &mut arc_entries,
+            )?;
+        } else {
+            insert_direct_iso_entry(&mut entries, &rel_iso_path, &bytes);
         }
     }
 
-    // Finalize: consolidate all BMG entries into a single JSON file
-    finalize_bmg_export(&mut entries, output_dir, &consolidated_bmg)?;
+    // Process arc entries
 
-    println!("Exported {} BMG sources to text/messages.json", consolidated_bmg.sources.len());
+    process_plain_entries(&arc_entries, &mut entries)?;
+
+    let mut consolidated_bmg = ConsolidatedBmg::new();
+    process_bmg_entries(&arc_entries, &mut consolidated_bmg)?;
+
+    // Finalize
+    finalize_bmg_export(&mut entries, output_dir, &consolidated_bmg)?;
+    // Future: finalize_aw_export(...)?;
+
+    println!(
+        "Exported {} BMG sources to text/messages.json",
+        consolidated_bmg.sources.len()
+    );
     Ok((entries, arcs))
 }
 
-fn insert_direct_iso_entry(entries: &mut Map<String, Value>, rel_iso_path: &str, bytes: &[u8]) {
-    entries.insert(
-        rel_iso_path.to_string(),
-        json!({
-            "iso": rel_iso_path,
-            "sha1": { "base": sha1_hex(bytes) }
-        }),
-    );
-}
+// ARC unpacking
 
-// Decoders
-
-/// BMG decoder: collects BMG files from a single ARC for later consolidation.
-/// Instead of writing individual JSON files, this accumulates all BMG data
-/// to be consolidated into a single text/messages.json file.
-fn process_bmg_entries(
-    ctx: &mut ProcessContext,
-    archive: &ParsedArchive,
-    bmg_entry_paths: &[String],
+/// Recursively unpacks an ARC, registering it in `arcs` and collecting all
+/// non-arc files as ArcEntry values. Nested arcs are registered with a composite
+/// path (e.g. "files/Foo.arc/bar.arc") but all entries always reference the
+/// top-level ISO arc via `top_level_arc`.
+fn unpack_arc(
+    top_level_arc: &str,
+    current_arc: &str,
+    prefix: &str,
+    bytes: &[u8],
+    arcs: &mut Vec<String>,
+    arc_entries: &mut Vec<ArcEntry>,
 ) -> Result<(), String> {
-    for internal_path in bmg_entry_paths {
-        let entry = archive
-            .rarc
-            .file_entries
-            .iter()
-            .find(|e| !e.is_dir && rarc_entry_path(&archive.rarc, e) == *internal_path);
+    let rarc = match Rarc::parse(bytes.to_vec()) {
+        Some(r) => r,
+        None => {
+            eprintln!("  Warning: failed to parse ARC {}", current_arc);
+            return Ok(());
+        }
+    };
 
-        let Some(entry) = entry else {
+    arcs.push(current_arc.to_string());
+
+    for entry in &rarc.file_entries {
+        if entry.is_dir {
             continue;
-        };
+        }
         let Some(data) = &entry.data else {
             continue;
         };
 
-        let bmg = match Bmg::parse(data) {
+        let internal_path = rarc_entry_path(&rarc, entry);
+        let full_path = if prefix.is_empty() {
+            internal_path.clone()
+        } else {
+            format!("{}/{}", prefix, internal_path)
+        };
+
+        if internal_path.ends_with(".arc") {
+            // Nested arc: register with composite path, recurse with same top_level_arc
+            let nested_arc_path = format!("{}/{}", current_arc, internal_path);
+            unpack_arc(
+                top_level_arc,
+                &nested_arc_path,
+                &full_path,
+                data,
+                arcs,
+                arc_entries,
+            )?;
+        } else {
+            arc_entries.push(ArcEntry {
+                top_level_arc: top_level_arc.to_string(),
+                internal_path: full_path,
+                data: data.clone(),
+            });
+        }
+    }
+
+    Ok(())
+}
+
+// Format processors
+
+/// 3a) Plain files: registers all arc entries that have no dedicated decoder
+/// as standard archive manifest entries.
+fn process_plain_entries(
+    arc_entries: &[ArcEntry],
+    entries: &mut Map<String, Value>,
+) -> Result<(), String> {
+    for entry in arc_entries
+        .iter()
+        .filter(|e| !is_decoded_format(&e.internal_path))
+    {
+        let stem = archive_stem(&entry.top_level_arc).unwrap_or_default();
+        let friendly_path = get_friendly_path(&entry.top_level_arc, &stem, &entry.internal_path)
+            .unwrap_or_else(|| format!("{}/{}", stem, entry.internal_path));
+
+        entries.insert(
+            friendly_path,
+            json!({
+                "archive": entry.top_level_arc,
+                "path": entry.internal_path,
+                "sha1": { "base": sha1_hex(&entry.data) }
+            }),
+        );
+    }
+    Ok(())
+}
+
+/// BMG decoder: collects all .bmg files for later consolidation into
+/// a single text/messages.json file.
+fn process_bmg_entries(
+    arc_entries: &[ArcEntry],
+    consolidated_bmg: &mut ConsolidatedBmg,
+) -> Result<(), String> {
+    for entry in arc_entries
+        .iter()
+        .filter(|e| e.internal_path.ends_with(".bmg"))
+    {
+        let bmg = match Bmg::parse(&entry.data) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!(
                     "  Warning: failed to parse BMG {}/{}: {}",
-                    archive.iso_path, internal_path, e
+                    entry.top_level_arc, entry.internal_path, e
                 );
                 continue;
             }
         };
 
         let json_val = crate::formats::bmg::to_json::bmg_to_json(&bmg)?;
-        
-        // Collect this BMG source for later consolidation
         let source = BmgSource::from_bmg(
-            archive.iso_path.clone(),
-            internal_path.clone(),
+            entry.top_level_arc.clone(),
+            entry.internal_path.clone(),
             bmg.encoding.clone(),
             json_val,
         );
-        ctx.consolidated_bmg.add_source(source);
+        consolidated_bmg.add_source(source);
     }
-
     Ok(())
 }
 
-/// Finalize BMG export: consolidate all collected BMG sources into a single JSON file.
-/// This creates text/messages.json with all messages grouped by their source archive.
+// Finalize
+
+/// Writes text/messages.json and inserts the multi-source manifest entry.
 fn finalize_bmg_export(
     entries: &mut Map<String, Value>,
     output_dir: &Path,
@@ -196,32 +221,27 @@ fn finalize_bmg_export(
         return Ok(());
     }
 
-    // Convert to consolidated JSON format
     let consolidated_json = consolidated_bmg.to_json();
     let json_bytes = serde_json::to_vec_pretty(&consolidated_json)
         .map_err(|e| format!("Serialize consolidated BMG JSON failed: {}", e))?;
 
-    // Write to text/messages.json
     write_output_file(output_dir, "text/messages.json", &json_bytes)?;
 
-    // Create manifest entries with per-source hashes for fine-grained build tracking
-    // Instead of tracking the combined JSON, we track each source's messages separately
-    // so that only modified BMGs are rebuilt
     let sources_for_manifest: Vec<Value> = consolidated_bmg
         .sources
         .iter()
         .map(|src| {
-            // Serialize just this source's messages array to JSON
-            let source_messages_json = serde_json::to_vec_pretty(&serde_json::json!(src.messages))
-                .unwrap_or_default();
+            let source_messages_json =
+                serde_json::to_vec_pretty(&serde_json::json!(src.messages)).unwrap_or_default();
             let source_hash = sha1_hex(&source_messages_json);
-            
-            // Count messages (first element is metadata, rest are messages)
-            let count = src.messages.iter()
+
+            let count = src
+                .messages
+                .iter()
                 .skip(1)
                 .filter(|m| m.get("ID").is_some())
                 .count();
-            
+
             json!({
                 "archive": src.archive,
                 "path": src.path,
@@ -233,49 +253,65 @@ fn finalize_bmg_export(
 
     entries.insert(
         "text/messages.json".to_string(),
-        json!({
-            "sources": sources_for_manifest
-        }),
+        json!({ "sources": sources_for_manifest }),
     );
 
     Ok(())
 }
 
-/// Track all non-exported files from archives in the manifest.
-/// These files are not exported but are tracked as dependencies for rebuilding.
-fn process_other_arc_files(
-    ctx: &mut ProcessContext,
-    archive: &ParsedArchive,
-    other_entry_paths: &[String],
-) -> Result<(), String> {
-    for internal_path in other_entry_paths {
-        let entry = archive
-            .rarc
-            .file_entries
-            .iter()
-            .find(|e| !e.is_dir && rarc_entry_path(&archive.rarc, e) == *internal_path);
+// Helpers
 
-        let Some(entry) = entry else {
-            continue;
-        };
-        let Some(data) = &entry.data else {
-            continue;
-        };
+fn insert_direct_iso_entry(entries: &mut Map<String, Value>, rel_iso_path: &str, bytes: &[u8]) {
+    entries.insert(
+        rel_iso_path.to_string(),
+        json!({
+            "iso": rel_iso_path,
+            "sha1": { "base": sha1_hex(bytes) }
+        }),
+    );
+}
 
-        // Generate a friendly path for reference (even though file isn't exported)
-        let friendly_path = format!("{}/{}", archive.stem, internal_path);
+/// Returns true for file extensions that have a dedicated decoder and should
+/// not be registered as plain archive entries.
+fn is_decoded_format(internal_path: &str) -> bool {
+    internal_path.ends_with(".bmg")
+    // Future: || internal_path.ends_with(".aw")
+    // Future: || internal_path.ends_with(".dae")
+}
 
-        ctx.entries.insert(
-            friendly_path,
-            json!({
-                "archive": archive.iso_path,
-                "path": internal_path,
-                "sha1": { "base": sha1_hex(data) }
-            }),
-        );
+/// Generates the friendly mod-relative path for a file from an archive.
+fn get_friendly_path(
+    archive_iso_path: &str,
+    archive_stem: &str,
+    internal_path: &str,
+) -> Option<String> {
+    let category = if archive_iso_path.contains("Object/") {
+        "actors"
+    } else if archive_iso_path.contains("Stage/") {
+        "stages"
+    } else if archive_iso_path.contains("Audiores/") {
+        "audio"
+    } else if archive_iso_path.contains("misc/") {
+        "ui"
+    } else {
+        "res"
+    };
+
+    if internal_path.ends_with(".aw") {
+        let base = internal_path.strip_suffix(".aw").unwrap_or(internal_path);
+        return Some(format!("audio/waves/{}/{}.json", archive_stem, base));
     }
 
-    Ok(())
+    if internal_path.ends_with(".dae") {
+        let base = internal_path.strip_suffix(".dae").unwrap_or(internal_path);
+        return Some(format!("{}/{}/{}.dae", category, archive_stem, base));
+    }
+
+    if internal_path.ends_with(".bmd") {
+        return Some(format!("{}/{}/{}", category, archive_stem, internal_path));
+    }
+
+    Some(format!("{}/{}/{}", category, archive_stem, internal_path))
 }
 
 fn archive_stem(archive_iso_path: &str) -> Result<String, String> {
@@ -326,55 +362,4 @@ fn rarc_entry_path(rarc: &Rarc, entry: &crate::formats::rarc::FileEntry) -> Stri
     } else {
         entry.name.clone()
     }
-}
-
-/// Generates the friendly path for a file exported from an archive.
-/// Handles format conversions (.bmg → .json, .aw → .json, .dae, etc.)
-/// and assigns to the appropriate top-level directory based on ISO location.
-fn get_friendly_path(
-    archive_iso_path: &str,
-    archive_stem: &str,
-    internal_path: &str,
-) -> Option<String> {
-    // Determine category and output format based on file type and archive location
-    let category = if archive_iso_path.contains("Object/") {
-        "actors"
-    } else if archive_iso_path.contains("Stage/") {
-        "stages"
-    } else if archive_iso_path.contains("Audiores/") {
-        "audio"
-    } else if archive_iso_path.contains("misc/") {
-        "ui"
-    } else {
-        "res"
-    };
-
-    // Format conversions: binary → editable
-    if internal_path.ends_with(".bmg") {
-        let internal_no_ext = internal_path.strip_suffix(".bmg").unwrap_or(internal_path);
-        return Some(format!("text/{}/{}.json", archive_stem, internal_no_ext));
-    }
-
-    if internal_path.ends_with(".aw") {
-        let internal_no_ext = internal_path.strip_suffix(".aw").unwrap_or(internal_path);
-        return Some(format!(
-            "audio/waves/{}/{}.json",
-            archive_stem, internal_no_ext
-        ));
-    }
-
-    if internal_path.ends_with(".dae") {
-        let internal_no_ext = internal_path.strip_suffix(".dae").unwrap_or(internal_path);
-        return Some(format!(
-            "{}/{}/{}.dae",
-            category, archive_stem, internal_no_ext
-        ));
-    }
-
-    if internal_path.ends_with(".bmd") {
-        return Some(format!("{}/{}/{}", category, archive_stem, internal_path));
-    }
-
-    // Default: preserve inside arc folder structure
-    Some(format!("{}/{}/{}", category, archive_stem, internal_path))
 }
