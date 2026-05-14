@@ -1,3 +1,36 @@
+/*
+Convert JSON back to BMG binary format.
+
+The JSON format exported by bmg_to_json preserves all BMG data including:
+- Message IDs (as "group, msg_id" format where msg_id is 24-bit)
+- Message text (with escape sequences for control codes in {...})
+- Message attributes (16 bytes when attribute_length=20)
+- Additional sections (non-standard BMG sections like custom metadata)
+
+Attributes Format (16 bytes, when attribute_length = 20):
+  Byte 0:     Group (high byte, usually 0x00)
+  Byte 1:     Message ID (low byte)
+  Bytes 2-3:  Padding/Unused (0x00 0x00)
+  Bytes 4-15: Attribute Data
+    Byte 4:   Unknown (typically 0x02)
+    Byte 5:   Unknown (typically 0x10)
+    Byte 6:   Unknown (typically 0x01)
+    Byte 7:   Unknown (usually 0x00)
+    Byte 8:   Unknown (typically 0xff)
+    Byte 9:   Unknown
+    Byte 10:  Unknown
+    Byte 11:  Unknown
+    Byte 12:  Unknown
+    Byte 13:  Unknown
+    Byte 14:  Color/Style Flag (0x01 or 0x09 observed)
+    Byte 15:  Padding (usually 0x00)
+
+Note: Attributes are preserved as-is from the JSON export. The ID field
+stores the MID1 section values (24-bit ID + 8-bit subid), which is separate
+from the attribute bytes. Do not modify attributes[0:1] as they contain
+important format information already correctly encoded in the JSON.
+*/
+
 use crate::formats::bmg::Bmg;
 use crate::utils::hex_to_bytes;
 use serde_json::Value;
@@ -5,7 +38,7 @@ use serde_json::Value;
 use crate::formats::bmg::parser::BmgMessage;
 use crate::formats::bmg::parser::BmgSection;
 
-pub fn json_to_bmg(val: &Value) -> Result<Bmg, String> {
+pub fn json_to_bmg(val: &Value, encoding: &str) -> Result<Bmg, String> {
     let arr = val.as_array().ok_or("Expected JSON array")?;
     if arr.is_empty() {
         return Err("Empty JSON".to_string());
@@ -94,7 +127,7 @@ pub fn json_to_bmg(val: &Value) -> Result<Bmg, String> {
     }
 
     Ok(Bmg {
-        encoding: "shift-jis".to_string(),
+        encoding: encoding.to_string(),
         messages,
         attribute_length,
         unknown_mid_value,
@@ -103,76 +136,53 @@ pub fn json_to_bmg(val: &Value) -> Result<Bmg, String> {
 }
 
 fn parse_full_message(full: &str, encoding: &str) -> Result<Vec<Vec<u8>>, String> {
-    use crate::utils::hex_to_bytes;
+    let mut parts = Vec::new();
+    let mut current = Vec::new();
 
-    let mut parts: Vec<Vec<u8>> = Vec::new();
-    let mut cur = String::new();
-    let mut i = 0;
-    let s = full;
-    let bytes = s.as_bytes();
-    while i < s.len() {
-        match bytes[i] {
-            b'\\' => {
-                if i + 1 < s.len() {
-                    let next = bytes[i + 1];
-                    if next == b'{' || next == b'}' {
-                        cur.push(next as char);
-                        i += 2;
-                        continue;
-                    }
+    let mut chars = full.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '{' {
+            // Read until closing }
+            let mut hex_str = String::new();
+            while let Some(&c) = chars.peek() {
+                if c == '}' {
+                    chars.next();
+                    break;
                 }
-                cur.push('\\');
-                i += 1;
+                hex_str.push(c);
+                chars.next();
             }
-            b'{' => {
-                // flush current
-                if !cur.is_empty() {
-                    parts.push(encode_text(&cur, encoding)?);
-                    cur.clear();
-                }
-                // find closing brace
-                if let Some(rel) = s[i + 1..].find('}') {
-                    let end = i + 1 + rel;
-                    let hex = &s[i + 1..end];
-                    let bin = hex_to_bytes(hex)?;
-                    parts.push(bin);
-                    i = end + 1;
-                } else {
-                    return Err("Unterminated { in text".to_string());
-                }
+            // Flush current text
+            if !current.is_empty() {
+                parts.push(current);
+                current = Vec::new();
             }
-            _ => {
-                // consume until next special
-                let subs = &s[i..];
-                let next_pos = subs.find(|c| c == '\\' || c == '{').unwrap_or(subs.len());
-                cur.push_str(&subs[..next_pos]);
-                i += next_pos;
+            // Parse hex escape
+            let hex_data = hex_to_bytes(&hex_str)?;
+            parts.push(hex_data);
+        } else if ch == '\n' {
+            // Add newline marker
+            current.push(0x00);
+        } else {
+            // Encode character
+            match encoding {
+                "shift-jis" => {
+                    let bytes = ch.to_string().into_bytes();
+                    current.extend_from_slice(&bytes);
+                }
+                "latin-1" => {
+                    current.push(ch as u8);
+                }
+                _ => {
+                    current.push(ch as u8);
+                }
             }
         }
     }
-    if !cur.is_empty() {
-        parts.push(encode_text(&cur, encoding)?);
-    }
-    if parts.is_empty() {
-        Ok(vec![vec![]])
-    } else {
-        Ok(parts)
-    }
-}
 
-fn encode_text(s: &str, encoding: &str) -> Result<Vec<u8>, String> {
-    if encoding == "latin-1" {
-        let mut out = Vec::new();
-        for ch in s.chars() {
-            let code = ch as u32;
-            if code > 0xff {
-                out.push(b'?');
-            } else {
-                out.push(code as u8);
-            }
-        }
-        Ok(out)
-    } else {
-        Ok(s.as_bytes().to_vec())
+    if !current.is_empty() {
+        parts.push(current);
     }
+
+    Ok(parts)
 }

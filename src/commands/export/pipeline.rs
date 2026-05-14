@@ -6,8 +6,12 @@ Sequence (add new decoders below by calling process_<format>_entries):
 2) ARC archive decoder
 3) BMG decoder (processes BMG files inside ARC archives)
 4) Future: add more decoders here (e.g., AW, DAE, etc.)
+
+BMG files are consolidated into a single text/messages.json file to avoid
+scattered JSON files across multiple directories.
 */
 
+use crate::commands::export::consolidated_bmg::{ConsolidatedBmg, BmgSource};
 use crate::formats::bmg::Bmg;
 use crate::formats::iso;
 use crate::formats::rarc::Rarc;
@@ -20,7 +24,7 @@ pub struct ProcessContext<'a> {
     entries: &'a mut Map<String, Value>,
     arcs: &'a mut Vec<String>,
     output_dir: &'a Path,
-    bmg_count: &'a mut usize,
+    consolidated_bmg: &'a mut ConsolidatedBmg,
 }
 
 struct ParsedArchive {
@@ -40,7 +44,7 @@ pub fn export_entries(
     let mut arcs = Vec::new();
     let mut iso_file =
         std::fs::File::open(iso_path).map_err(|e| format!("Failed to open ISO: {e}"))?;
-    let mut bmg_count = 0usize;
+    let mut consolidated_bmg = ConsolidatedBmg::new();
 
     for file in files {
         let rel_iso_path = file
@@ -105,7 +109,7 @@ pub fn export_entries(
                 entries: &mut entries,
                 arcs: &mut arcs,
                 output_dir,
-                bmg_count: &mut bmg_count,
+                consolidated_bmg: &mut consolidated_bmg,
             };
 
             process_bmg_entries(&mut ctx, &archive, &bmg_entries)?;
@@ -114,7 +118,10 @@ pub fn export_entries(
         }
     }
 
-    println!("Exported {} BMG files", bmg_count);
+    // Finalize: consolidate all BMG entries into a single JSON file
+    finalize_bmg_export(&mut entries, output_dir, &consolidated_bmg)?;
+
+    println!("Exported {} BMG sources to text/messages.json", consolidated_bmg.sources.len());
     Ok((entries, arcs))
 }
 
@@ -130,8 +137,9 @@ fn insert_direct_iso_entry(entries: &mut Map<String, Value>, rel_iso_path: &str,
 
 // Decoders
 
-/// BMG decoder: converts BMG files to JSON and saves them.
-/// Processes all BMG entries from a single ARC parse in bulk.
+/// BMG decoder: collects BMG files from a single ARC for later consolidation.
+/// Instead of writing individual JSON files, this accumulates all BMG data
+/// to be consolidated into a single text/messages.json file.
 fn process_bmg_entries(
     ctx: &mut ProcessContext,
     archive: &ParsedArchive,
@@ -163,27 +171,72 @@ fn process_bmg_entries(
         };
 
         let json_val = crate::formats::bmg::to_json::bmg_to_json(&bmg)?;
-        let json_bytes = serde_json::to_vec_pretty(&json_val)
-            .map_err(|e| format!("Serialize JSON failed: {}", e))?;
-
-        let friendly_path = match get_friendly_path(&archive.iso_path, &archive.stem, internal_path)
-        {
-            Some(p) => p,
-            None => continue,
-        };
-        write_output_file(ctx.output_dir, &friendly_path, &json_bytes)?;
-
-        ctx.entries.insert(
-            friendly_path,
-            json!({
-                "archive": archive.iso_path,
-                "path": internal_path,
-                "sha1": { "base": sha1_hex(&json_bytes) }
-            }),
+        
+        // Collect this BMG source for later consolidation
+        let source = BmgSource::from_bmg(
+            archive.iso_path.clone(),
+            internal_path.clone(),
+            bmg.encoding.clone(),
+            json_val,
         );
-
-        *ctx.bmg_count += 1;
+        ctx.consolidated_bmg.add_source(source);
     }
+
+    Ok(())
+}
+
+/// Finalize BMG export: consolidate all collected BMG sources into a single JSON file.
+/// This creates text/messages.json with all messages grouped by their source archive.
+fn finalize_bmg_export(
+    entries: &mut Map<String, Value>,
+    output_dir: &Path,
+    consolidated_bmg: &ConsolidatedBmg,
+) -> Result<(), String> {
+    if consolidated_bmg.sources.is_empty() {
+        return Ok(());
+    }
+
+    // Convert to consolidated JSON format
+    let consolidated_json = consolidated_bmg.to_json();
+    let json_bytes = serde_json::to_vec_pretty(&consolidated_json)
+        .map_err(|e| format!("Serialize consolidated BMG JSON failed: {}", e))?;
+
+    // Write to text/messages.json
+    write_output_file(output_dir, "text/messages.json", &json_bytes)?;
+
+    // Create manifest entries with per-source hashes for fine-grained build tracking
+    // Instead of tracking the combined JSON, we track each source's messages separately
+    // so that only modified BMGs are rebuilt
+    let sources_for_manifest: Vec<Value> = consolidated_bmg
+        .sources
+        .iter()
+        .map(|src| {
+            // Serialize just this source's messages array to JSON
+            let source_messages_json = serde_json::to_vec_pretty(&serde_json::json!(src.messages))
+                .unwrap_or_default();
+            let source_hash = sha1_hex(&source_messages_json);
+            
+            // Count messages (first element is metadata, rest are messages)
+            let count = src.messages.iter()
+                .skip(1)
+                .filter(|m| m.get("ID").is_some())
+                .count();
+            
+            json!({
+                "archive": src.archive,
+                "path": src.path,
+                "message_count": count,
+                "sha1": { "base": source_hash }
+            })
+        })
+        .collect();
+
+    entries.insert(
+        "text/messages.json".to_string(),
+        json!({
+            "sources": sources_for_manifest
+        }),
+    );
 
     Ok(())
 }

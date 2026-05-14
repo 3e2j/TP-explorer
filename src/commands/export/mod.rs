@@ -10,6 +10,7 @@ High-level sequence:
 mod iso_source;
 mod manifest;
 mod pipeline;
+pub mod consolidated_bmg;
 
 use crate::formats::iso;
 use std::fs;

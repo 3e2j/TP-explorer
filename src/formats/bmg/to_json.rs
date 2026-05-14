@@ -13,11 +13,10 @@ pub fn bmg_to_json(bmg: &Bmg) -> Result<Value, String> {
         "Unknown MID1 Value": format!("{:x}", bmg.unknown_mid_value),
     })];
 
-    for (idx, msg) in bmg.messages.iter().enumerate() {
+    for msg in bmg.messages.iter() {
         let text_lines = format_text_parts(&msg.text, &bmg.encoding)?;
         messages.push(json!({
             "ID": format!("{}, {}", msg.id.0, msg.id.1),
-            "index": format!("0x{:x}", idx),
             "attributes": bytes_to_hex(&msg.attributes),
             "text": text_lines,
         }));
