@@ -1,34 +1,40 @@
 # Twilight Princess Modding Toolchain
 
-A modding API and toolchain for *The Legend of Zelda: Twilight Princess* (GameCube, GZ2E).
+TP Explorer is a modding toolchain for *The Legend of Zelda: Twilight Princess* (GameCube, GZ2E).
 
-## What it does
+It supports:
+- **export**: extract a vanilla ISO into a modder-friendly folder
+- **build**: rebuild changed files from a sparse mod folder using `manifest.json`
 
-The toolchain lets you extract game files from a vanilla ISO, edit them, and recompile into a mod folder — without needing to understand the raw disc or archive format.
+## Quick usage
 
-Three operations are exposed as a library API (with CLI wrappers):
-
-- **Extract** — unpacks a vanilla ISO into a clean, human-readable folder structure
-- **Build** — takes a mod folder and a vanilla ISO, patches only the changed files, and builds into a mod folder
-- **Diff** — compares a mod folder against the vanilla ISO to show exactly what has changed
-
-## How mods work
-
-A mod is a sparse folder. You only include the files you want to change. Everything else is sourced from the base ISO at build time.
-
+```bash
+tp-explorer export <iso_path> <output_dir>
+tp-explorer build <iso_path> <mod_dir> <output_dir>
+tp-explorer build <iso_path> <mod_dir> --iso-output <patched_iso_path>
 ```
+
+## Mod folder model
+
+A mod folder is sparse. Add only files you want to change; unchanged files come from the base ISO at build time.
+
+```text
 my_mod/
 ├── manifest.json
 ├── actors/
-│   └── enemies/
-│       └── darknut/        ← only what you changed
 └── text/
-    └── bmgres.arc/
-        └── zel_00.json
+    └── messages.json
 ```
 
-This gets built into a mod structure replicating the original game formats ready for ISO patching.
+## Documentation
+
+- `docs/file-structure.md` - mod path layout and ISO mapping
+- `docs/formats` - format specific schema docs
+- `docs/architecture.md` - high-level architecture
 
 ## Scope
 
-GameCube (GZ2E / NTSC-U) only. No Wii or HD (Wii U) support.
+GameCube only (GZ2E / NTSC-U). No Wii or HD (Wii U) support.
+
+> [!IMPORTANT]
+> You must provide your own game copy. This repository contains no game assets.
