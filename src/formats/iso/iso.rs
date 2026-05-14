@@ -4,8 +4,6 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 use std::time::Instant;
 
-use sha1::Sha1;
-
 const FST_OFFSET_OFFSET: u64 = 0x424;
 const FST_SIZE_OFFSET: u64 = 0x428;
 const FST_ENTRY_SIZE: usize = 0x0C;

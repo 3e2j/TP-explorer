@@ -169,7 +169,7 @@ fn process_plain_entries(
             json!({
                 "archive": entry.top_level_arc,
                 "path": entry.internal_path,
-                "sha1": { "base": sha1_hex(&entry.data) }
+                "sha1": sha1_hex(&entry.data)
             }),
         );
     }
@@ -235,18 +235,10 @@ fn finalize_bmg_export(
                 serde_json::to_vec_pretty(&serde_json::json!(src.messages)).unwrap_or_default();
             let source_hash = sha1_hex(&source_messages_json);
 
-            let count = src
-                .messages
-                .iter()
-                .skip(1)
-                .filter(|m| m.get("ID").is_some())
-                .count();
-
             json!({
                 "archive": src.archive,
                 "path": src.path,
-                "message_count": count,
-                "sha1": { "base": source_hash }
+                "sha1": source_hash
             })
         })
         .collect();
@@ -266,7 +258,7 @@ fn insert_direct_iso_entry(entries: &mut Map<String, Value>, rel_iso_path: &str,
         rel_iso_path.to_string(),
         json!({
             "iso": rel_iso_path,
-            "sha1": { "base": sha1_hex(bytes) }
+            "sha1": sha1_hex(bytes)
         }),
     );
 }

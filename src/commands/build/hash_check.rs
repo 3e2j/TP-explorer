@@ -15,7 +15,6 @@ use std::path::Path;
 pub struct ModifiedFile {
     pub friendly_path: String,
     pub mod_path: String,
-    pub original_hash: String,
     pub archive: Option<String>, // arc path if this file belongs to an arc
     pub internal_path: Option<String>, // path inside arc
 }
@@ -52,9 +51,8 @@ pub fn find_modified_files(mod_dir: &Path) -> Result<Vec<ModifiedFile>, String> 
         // Standard file comparison
         let original_hash = entry
             .get("sha1")
-            .and_then(|s| s.get("base"))
-            .and_then(|h| h.as_str())
-            .ok_or(format!("Entry {} missing sha1.base", friendly_path))?
+            .and_then(read_manifest_sha1)
+            .ok_or(format!("Entry {} missing sha1", friendly_path))?
             .to_string();
 
         let mod_file_path = mod_dir.join(friendly_path);
@@ -74,7 +72,6 @@ pub fn find_modified_files(mod_dir: &Path) -> Result<Vec<ModifiedFile>, String> 
                 modified.push(ModifiedFile {
                     friendly_path: friendly_path.clone(),
                     mod_path: mod_file_path.to_string_lossy().to_string(),
-                    original_hash,
                     archive,
                     internal_path,
                 });
@@ -125,9 +122,8 @@ fn check_consolidated_bmg_changes(
             .to_string();
         let hash = src
             .get("sha1")
-            .and_then(|s| s.get("base"))
-            .and_then(|h| h.as_str())
-            .ok_or("Source missing sha1.base in manifest")?
+            .and_then(read_manifest_sha1)
+            .ok_or("Source missing sha1 in manifest")?
             .to_string();
 
         original_hashes.insert((archive.clone(), path.clone()), hash);
@@ -136,7 +132,7 @@ fn check_consolidated_bmg_changes(
     // Convert to individual BMGs and compute per-source hashes
     let individual_bmgs = ConsolidatedBmg::to_individual_bmgs(&consolidated)?;
 
-    for ((archive, path), (bmg_json, encoding)) in individual_bmgs {
+    for ((archive, path), (bmg_json, _encoding)) in individual_bmgs {
         // Compute hash of this source's messages
         let source_hash = serde_json::to_vec_pretty(&bmg_json)
             .map_err(|e| format!("Serialize source BMG failed: {}", e))?;
@@ -153,7 +149,6 @@ fn check_consolidated_bmg_changes(
             modified.push(ModifiedFile {
                 friendly_path: "text/messages.json".to_string(),
                 mod_path: mod_messages_path.to_string_lossy().to_string(),
-                original_hash,
                 archive: Some(archive),
                 internal_path: Some(path),
             });
@@ -172,4 +167,12 @@ fn sha1_hex(bytes: &[u8]) -> String {
     let mut hasher = sha1::Sha1::new();
     hasher.update(bytes);
     hasher.digest().to_string()
+}
+
+fn read_manifest_sha1(v: &Value) -> Option<&str> {
+    match v {
+        Value::String(s) => Some(s),
+        Value::Object(obj) => obj.get("base").and_then(|h| h.as_str()),
+        _ => None,
+    }
 }

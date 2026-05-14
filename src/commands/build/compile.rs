@@ -55,7 +55,7 @@ pub fn compile_modified_files(
                 // Look up this specific source in the consolidated BMG
                 let key = (archive.clone(), path.clone());
                 if let Some((bmg_json, encoding)) = individual_bmgs.get(&key) {
-                    let mut bmg = crate::formats::bmg::from_json::json_to_bmg(bmg_json, encoding)?;
+                    let bmg = crate::formats::bmg::from_json::json_to_bmg(bmg_json, encoding)?;
                     let compiled_bytes = bmg.to_bytes()?;
 
                     let mut source_mod_file = mod_file.clone();

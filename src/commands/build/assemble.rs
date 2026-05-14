@@ -27,7 +27,7 @@ pub fn build_archives(
     let manifest_path = mod_dir.join("manifest.json");
     let manifest_content =
         fs::read_to_string(&manifest_path).map_err(|e| format!("Read manifest failed: {}", e))?;
-    let manifest: Value = serde_json::from_str(&manifest_content)
+    let _manifest: Value = serde_json::from_str(&manifest_content)
         .map_err(|e| format!("Parse manifest failed: {}", e))?;
 
     // Group compiled files by archive
