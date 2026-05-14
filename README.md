@@ -2,7 +2,13 @@
 
 Twilight Princess Modding Toolchain (TPMT) is a modding toolchain for *The Legend of Zelda: Twilight Princess* (GameCube, GZ2E).
 
-It supports:
+## Current status
+
+> ⚠️ *Early development*: TPMT currently *only supports editing in-game text messages* (character dialogue and UI messages).
+> Other asset types (models, textures, actors, etc.) are not yet supported.
+
+## Features
+
 - **export**: extract a vanilla ISO into a modder-friendly folder
 - **build**: rebuild changed files from a sparse mod folder using `manifest.json`
 
@@ -16,7 +22,8 @@ tpmt build <iso_path> <mod_dir> --iso-output <patched_iso_path>
 
 ## Mod folder model
 
-A mod folder is sparse. Add only files you want to change; unchanged files come from the base ISO at build time.
+The mod folder provides a structured workspace of the base files with human-readable names.
+Edit the files you want to change; any dependencies are pulled from the base ISO at build time.
 
 ```text
 my_mod/
@@ -37,4 +44,13 @@ my_mod/
 GameCube only (GZ2E / NTSC-U). No Wii or HD (Wii U) support.
 
 > [!IMPORTANT]
-> You must provide your own game copy. This repository contains no game assets.
+> You must provide your own game copy. This repository does not contain game assets.
+
+## Building TPMT
+
+### Requirements
+Rust (stable) - install via https://rustup.rs
+
+```sh
+cargo build --release
+```
