@@ -148,35 +148,32 @@ fn manifest_consolidated_source_hashes(
     manifest: &Value,
 ) -> Result<std::collections::HashMap<(String, String), String>, String> {
     let mut original_hashes = std::collections::HashMap::new();
-    let archives_obj = match manifest.get("archives").and_then(|v| v.as_object()) {
-        Some(a) => a,
-        None => return Ok(original_hashes),
-    };
+    let sources = manifest
+        .get("entries")
+        .and_then(|v| v.as_object())
+        .and_then(|entries| entries.get("text/messages.json"))
+        .and_then(|entry| entry.as_object())
+        .and_then(|entry| entry.get("sources"))
+        .and_then(|sources| sources.as_array())
+        .ok_or("Consolidated BMG missing sources in manifest entries")?;
 
-    for (arc, map) in archives_obj {
-        let map = match map.as_object() {
-            Some(m) => m,
-            None => continue,
-        };
-        if let Some(entry_val) = map.get("text/messages.json") {
-            if let Some(entry_obj) = entry_val.as_object() {
-                if let Some(sources) = entry_obj.get("sources").and_then(|v| v.as_array()) {
-                    for src in sources {
-                        let path = src
-                            .get("path")
-                            .and_then(|p| p.as_str())
-                            .ok_or("Source missing path in manifest")?
-                            .to_string();
-                        let hash = src
-                            .get("sha1")
-                            .and_then(read_manifest_sha1)
-                            .ok_or("Source missing sha1 in manifest")?
-                            .to_string();
-                        original_hashes.insert((arc.clone(), path), hash);
-                    }
-                }
-            }
-        }
+    for src in sources {
+        let arc = src
+            .get("archive")
+            .and_then(|a| a.as_str())
+            .ok_or("Source missing archive in manifest")?
+            .to_string();
+        let path = src
+            .get("path")
+            .and_then(|p| p.as_str())
+            .ok_or("Source missing path in manifest")?
+            .to_string();
+        let hash = src
+            .get("sha1")
+            .and_then(read_manifest_sha1)
+            .ok_or("Source missing sha1 in manifest")?
+            .to_string();
+        original_hashes.insert((arc, path), hash);
     }
 
     Ok(original_hashes)
