@@ -40,8 +40,8 @@ fn run_export_pipeline(iso_path: &Path, output_dir: &Path) -> Result<(), String>
     let iso_files = iso::parse_iso_files(iso_path)?;
     println!("Found {} files in ISO", iso_files.len());
 
-    let (entries, arcs) = pipeline::export_entries(iso_path, output_dir)?;
-    manifest::write_manifest(output_dir, entries, arcs)?;
+    let entries = pipeline::export_entries(iso_path, output_dir)?;
+    manifest::write_manifest(output_dir, entries)?;
 
     println!(
         "Export complete. Manifest written to {}/manifest.json",

@@ -4,15 +4,17 @@ Build command: reverse of export.
 Multi-stage pipeline:
 1) Load manifest and compare file hashes (original vs mod)
 2) Compile modified files (JSON→BMG, etc.)
-3) Resolve dependencies from manifest (all files per arc)
-4) Extract dependencies from ISO
+3) Buffer direct files
+4) Resolve archive-backed files and fetch missing archive data
 5) Assemble modified archives
-6) Output final build directory
+6) Write the full build output
 */
 
 mod assemble;
+mod archive_plan;
 mod compile;
 mod hash_check;
+mod output;
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -23,6 +25,9 @@ pub fn run(
     output_dir: Option<&str>,
     iso_output: Option<&str>,
 ) -> Result<(), String> {
+    let build_temp: bool = output_dir.is_none();
+    let build_iso: bool = iso_output.is_some();
+
     println!("Building mod: {}", mod_dir);
     println!("Source ISO: {}", iso_path);
     if let Some(iso_out) = iso_output {
@@ -32,7 +37,7 @@ pub fn run(
     let mod_path = Path::new(mod_dir);
     let iso_path_p = Path::new(iso_path);
 
-    let (output_path_buf, temp_output_dir) = match output_dir {
+    let (output_path_buf, _temp_output_dir) = match output_dir {
         Some(dir) => {
             let path = PathBuf::from(dir);
             std::fs::create_dir_all(&path)
@@ -61,21 +66,47 @@ pub fn run(
 
     // Stage 2: Compile modified files to original formats
     let compiled = compile::compile_modified_files(&modified_files, mod_path)?;
-    println!("Compiled {} files", compiled.len());
 
-    // Stage 3-5: Resolve .arc dependencies, extract, and assemble
-    let result = assemble::build_archives(&compiled, iso_path_p, mod_path, output_path, iso_output);
+    let (direct_files, archive_files): (Vec<_>, Vec<_>) = compiled
+        .into_iter()
+        .partition(|c| c.mod_file.archive.is_none());
 
-    if let Some(()) = temp_output_dir {
+    // Stage 3: Buffer direct (non-archive) outputs
+    let direct_outputs = output::collect_direct_outputs(&direct_files);
+
+    // Stage 4: Read the manifest archive map and fetch any missing archive
+    // contents from the ISO when needed.
+    let archive_inputs = archive_plan::plan_archive_inputs(&archive_files, mod_path, iso_path_p)?;
+
+    // Stage 5: Assemble modified archives
+    let archive_outputs = assemble::assemble_archives(&archive_inputs)?;
+
+    let mut build_outputs = direct_outputs;
+    build_outputs.extend(archive_outputs);
+
+    // Stage 6: Write build to output
+    let build = output::write_outputs(output_path, &build_outputs)?;
+
+    // Rebuild ISO if requested
+    if build_iso {
+        let iso_out = iso_output.expect("build_iso set but iso_output missing");
+        let arc_paths: Vec<String> = build_outputs
+            .iter()
+            .filter(|o| o.path.ends_with(".arc"))
+            .map(|o| o.path.clone())
+            .collect();
+        output::rebuild_iso_from_outputs(iso_path_p, output_path, &arc_paths, &build, iso_out)?;
+    }
+
+    if build_temp {
         let _ = std::fs::remove_dir_all(output_path);
     }
 
-    result?;
-    if iso_output.is_some() && output_dir.is_none() {
-        println!("Build complete. Temporary build output removed after ISO export.");
+    if build_temp {
+        println!("Build complete.");
     } else {
         println!(
-            "Build complete. Output written to {}",
+            "Build complete. Output folder written to {}",
             output_path.display()
         );
     }

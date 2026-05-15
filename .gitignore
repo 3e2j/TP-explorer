@@ -1,4 +1,4 @@
 dev/
 target/
-export/
-build/
+/export/
+/build/

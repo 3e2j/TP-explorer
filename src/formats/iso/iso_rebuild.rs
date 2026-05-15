@@ -264,24 +264,23 @@ pub fn rebuild_iso_with_files(
 
         pad_to_alignment(&mut output, 4)?;
 
-        // Only log modified files
-        let filename = std::path::Path::new(&file.path)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or(&file.path);
+        // // Only log modified files
+        // let filename = std::path::Path::new(&file.path)
+        //     .file_name()
+        //     .and_then(|n| n.to_str())
+        //     .unwrap_or(&file.path);
 
-        if replacements.iter().any(|(k, _)| k.ends_with(filename)) {
-            println!(
-                "  Wrote: {} ({} bytes @ 0x{:x}) [modified]",
-                file.path,
-                file_data.len(),
-                current_offset
-            );
-        }
+        // if replacements.iter().any(|(k, _)| k.ends_with(filename)) {
+        //     println!(
+        //         "  Wrote: {} ({} bytes @ 0x{:x}) [modified]",
+        //         file.path,
+        //         file_data.len(),
+        //         current_offset
+        //     );
+        // }
     }
 
     output.sync_all().map_err(|e| format!("Sync failed: {e}"))?;
-    println!("ISO rebuilt successfully");
     Ok(())
 }
 

@@ -42,7 +42,8 @@ to rebuild only changed outputs (including archive repacks) and optionally emit 
 4. Generate `manifest.json` linking mod paths back to ISO/archive targets.
 5. On build, hash-compare mod files vs manifest baseline.
 6. Recompile edited formats (for example JSON -> BMG).
-7. Repack affected archives and write outputs.
+7. Write direct files to the output folder, then repack affected archives.
+8. Optionally rebuild the ISO using both direct file replacements and rebuilt archives.
 
 ---
 

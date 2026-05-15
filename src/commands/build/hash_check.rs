@@ -20,8 +20,7 @@ pub struct ModifiedFile {
 }
 
 /// Load manifest and find all modified files by comparing hashes.
-///
-/// Special handling for text/messages.json (consolidated BMG):
+/// Special handling for consolidated BMG (text/messages.json):
 /// - Compares each BMG source individually instead of the combined JSON
 /// - Only sources with changed hashes are marked as modified
 pub fn find_modified_files(mod_dir: &Path) -> Result<Vec<ModifiedFile>, String> {
@@ -31,24 +30,23 @@ pub fn find_modified_files(mod_dir: &Path) -> Result<Vec<ModifiedFile>, String> 
     let manifest: Value = serde_json::from_str(&manifest_content)
         .map_err(|e| format!("Parse manifest failed: {}", e))?;
 
-    let mut modified = Vec::new();
-
-    // Get entries from manifest
     let entries = manifest
         .get("entries")
         .and_then(|e| e.as_object())
         .ok_or("Manifest missing 'entries' object")?;
 
+    let friendly_to_archive = build_friendly_archive_map(&manifest);
+
+    let mut modified = Vec::new();
+
     for (friendly_path, entry_val) in entries {
         let entry = entry_val.as_object().ok_or("Entry is not an object")?;
 
-        // Special handling for consolidated BMG
         if friendly_path == "text/messages.json" {
-            check_consolidated_bmg_changes(mod_dir, &mut modified, entry)?;
+            check_consolidated_bmg_changes(mod_dir, &mut modified, &manifest)?;
             continue;
         }
 
-        // Standard file comparison
         let original_hash = entry
             .get("sha1")
             .and_then(read_manifest_sha1)
@@ -56,84 +54,70 @@ pub fn find_modified_files(mod_dir: &Path) -> Result<Vec<ModifiedFile>, String> 
             .to_string();
 
         let mod_file_path = mod_dir.join(friendly_path);
-        if mod_file_path.exists() {
-            let new_hash = compute_file_hash(&mod_file_path)?;
-
-            if new_hash != original_hash {
-                let archive = entry
-                    .get("archive")
-                    .and_then(|a| a.as_str())
-                    .map(|s| s.to_string());
-                let internal_path = entry
-                    .get("path")
-                    .and_then(|p| p.as_str())
-                    .map(|s| s.to_string());
-
-                modified.push(ModifiedFile {
-                    friendly_path: friendly_path.clone(),
-                    mod_path: mod_file_path.to_string_lossy().to_string(),
-                    archive,
-                    internal_path,
-                });
-            }
+        if !mod_file_path.exists() {
+            continue;
         }
+
+        let new_hash = compute_file_hash(&mod_file_path)?;
+        if new_hash == original_hash {
+            continue;
+        }
+
+        let archive = friendly_to_archive.get(friendly_path).cloned();
+        let internal_path = entry
+            .get("path")
+            .and_then(|p| p.as_str())
+            .map(|s| s.to_string());
+
+        modified.push(ModifiedFile {
+            friendly_path: friendly_path.clone(),
+            mod_path: mod_file_path.to_string_lossy().to_string(),
+            archive,
+            internal_path,
+        });
     }
 
     Ok(modified)
 }
 
+/// Build a map friendly_path -> archive by scanning manifest.archives.
+fn build_friendly_archive_map(manifest: &Value) -> std::collections::HashMap<String, String> {
+    let mut map = std::collections::HashMap::new();
+    if let Some(archives_obj) = manifest.get("archives").and_then(|v| v.as_object()) {
+        for (arc, m) in archives_obj {
+            if let Some(m) = m.as_object() {
+                for (friendly, _) in m {
+                    map.insert(friendly.clone(), arc.clone());
+                }
+            }
+        }
+    }
+    map
+}
+
 /// Check consolidated BMG file for per-source changes.
-/// Returns ModifiedFile entries only for sources with changed hashes.
+/// Reads original per-source hashes from manifest.archives and compares
+/// with hashes of the modified consolidated messages.json.
 fn check_consolidated_bmg_changes(
     mod_dir: &Path,
     modified: &mut Vec<ModifiedFile>,
-    manifest_entry: &serde_json::Map<String, Value>,
+    manifest: &Value,
 ) -> Result<(), String> {
     let mod_messages_path = mod_dir.join("text/messages.json");
     if !mod_messages_path.exists() {
         return Ok(());
     }
 
-    // Read modified consolidated JSON
     let json_str = fs::read_to_string(&mod_messages_path)
         .map_err(|e| format!("Read messages.json failed: {}", e))?;
     let consolidated: Value = serde_json::from_str(&json_str)
         .map_err(|e| format!("Parse messages.json failed: {}", e))?;
 
-    // Get manifest sources with their original hashes
-    let manifest_sources = manifest_entry
-        .get("sources")
-        .and_then(|s| s.as_array())
-        .ok_or("Consolidated BMG missing sources in manifest")?;
+    let original_hashes = manifest_consolidated_source_hashes(manifest)?;
 
-    // Create a map of (archive, path) -> original hash for fast lookup
-    let mut original_hashes: std::collections::HashMap<(String, String), String> =
-        std::collections::HashMap::new();
-    for src in manifest_sources {
-        let archive = src
-            .get("archive")
-            .and_then(|a| a.as_str())
-            .ok_or("Source missing archive in manifest")?
-            .to_string();
-        let path = src
-            .get("path")
-            .and_then(|p| p.as_str())
-            .ok_or("Source missing path in manifest")?
-            .to_string();
-        let hash = src
-            .get("sha1")
-            .and_then(read_manifest_sha1)
-            .ok_or("Source missing sha1 in manifest")?
-            .to_string();
-
-        original_hashes.insert((archive.clone(), path.clone()), hash);
-    }
-
-    // Convert to individual BMGs and compute per-source hashes
     let individual_bmgs = ConsolidatedBmg::to_individual_bmgs(&consolidated)?;
 
     for ((archive, path), (bmg_json, encoding)) in individual_bmgs {
-        // Compute hash of this source's editable identity (encoding + messages)
         let source_hash = serde_json::to_vec_pretty(&serde_json::json!({
             "encoding": encoding,
             "messages": bmg_json
@@ -141,13 +125,11 @@ fn check_consolidated_bmg_changes(
         .map_err(|e| format!("Serialize source BMG failed: {}", e))?;
         let new_hash = sha1_hex(&source_hash);
 
-        // Look up original hash
         let original_hash = original_hashes
             .get(&(archive.clone(), path.clone()))
             .cloned()
             .unwrap_or_default();
 
-        // If hash changed, mark as modified
         if new_hash != original_hash {
             modified.push(ModifiedFile {
                 friendly_path: "text/messages.json".to_string(),
@@ -159,6 +141,45 @@ fn check_consolidated_bmg_changes(
     }
 
     Ok(())
+}
+
+/// Extract per-source original hashes for consolidated BMG from manifest.archives.
+fn manifest_consolidated_source_hashes(
+    manifest: &Value,
+) -> Result<std::collections::HashMap<(String, String), String>, String> {
+    let mut original_hashes = std::collections::HashMap::new();
+    let archives_obj = match manifest.get("archives").and_then(|v| v.as_object()) {
+        Some(a) => a,
+        None => return Ok(original_hashes),
+    };
+
+    for (arc, map) in archives_obj {
+        let map = match map.as_object() {
+            Some(m) => m,
+            None => continue,
+        };
+        if let Some(entry_val) = map.get("text/messages.json") {
+            if let Some(entry_obj) = entry_val.as_object() {
+                if let Some(sources) = entry_obj.get("sources").and_then(|v| v.as_array()) {
+                    for src in sources {
+                        let path = src
+                            .get("path")
+                            .and_then(|p| p.as_str())
+                            .ok_or("Source missing path in manifest")?
+                            .to_string();
+                        let hash = src
+                            .get("sha1")
+                            .and_then(read_manifest_sha1)
+                            .ok_or("Source missing sha1 in manifest")?
+                            .to_string();
+                        original_hashes.insert((arc.clone(), path), hash);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(original_hashes)
 }
 
 fn compute_file_hash(path: &Path) -> Result<String, String> {

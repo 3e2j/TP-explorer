@@ -1,122 +1,76 @@
 # manifest.json format
 
-`manifest.json` is a generated mapping file used by the build pipeline.
+manifest.json is a generated mapping used by the build pipeline. Do not edit it by hand - export regenerates it from the base ISO.
 
-For normal modding, you should **not edit it by hand**.  
-Edit files in your mod folder; the tool uses the manifest to map those edits back to ISO paths.
+## Purpose
 
----
+The manifest maps mod-facing (friendly) file paths to their original ISO/ARC locations and export-time hashes. The build uses this to detect changed files and to reassemble archives.
 
-## What this file is for
+Key points for modders
 
-`manifest.json` tells the toolchain:
+- Keep manifest.json in your mod folder.
+- Do not edit entries manually; re-run export from a clean ISO if mappings look wrong.
+- The manifest is primarily for the toolchain; modders rarely need to read or edit it.
 
-- where each mod-facing file canonically lives in the ISO
-- whether extracted files canonically live within a archive file `.arc`
-- what base hash was exported (for detecting changes)
-- how `text/messages.json` maps back to multiple source `.bmg` files
-
-Path layout and folder naming are documented elsewhere (`../file-structure.md`).  
-This page only describes the manifest schema.
-
-### Modder notes
-
-- Keep `manifest.json` in your mod folder.
-- Do not rename or delete entries manually.
-- If mappings look wrong, re-run export from a clean base ISO rather than hand-editing manifest data.
-
----
-
-## Top-level shape
+## Top-level schema
 
 ```json
 {
   "version": 1,
-  "game": {
-    "id": "GZ2E",
-    "region": "NTSC-U",
-    "platform": "gamecube"
-  },
-  "arcs": ["files/res/Object/Alink.arc"],
-  "entries": {}
+  "game": { "id": "GZ2E", "region": "NTSC-U", "platform": "gamecube" },
+  "archives": { "files/res/Some.arc": { "friendly/path": { /* entry */ } } },
+  "entries": { "friendly/path": { /* entry */ } }
 }
 ```
 
-### Fields
+- `archives` (object): hoisted map of archive ISO path -> object of friendly_path -> entry. Each per-archive entry is the same as the top-level `entries` one, but without an `archive` field. This is the authoritative place the build uses to discover which files belong to each archive.
+- `entries` (object): sanitized map of friendly_path -> entry. Entries omit the redundant `archive` fields to keep the top-level list compact.
 
-| Key | Type | Meaning |
-|---|---|---|
-| `version` | number | Manifest schema version (`1`) |
-| `game` | object | Target game identity |
-| `arcs` | string[] | All discovered `.arc` files (ISO-style paths) |
-| `entries` | object | Map of mod-relative path -> entry object |
+## Entry types
 
----
-
-## `entries` types
-
-Each key in `entries` is a mod-relative path (example: `stages/.../room.dzr`).
-
-### 1) Archive file entry
-
-For a file that lives inside an `.arc`:
+1) Archive-contained file
 
 ```json
-"stages/dungeons/forest_temple/R00_00/room.dzr": {
-  "archive": "files/res/Stage/D_MN05/R00_00.arc",
-  "path": "room.dzr",
-  "sha1": "..."
+{
+  "stages/.../room.dzr": {
+    "path": "room.dzr",
+    "sha1": "..."
+  }
 }
 ```
 
-| Field | Meaning |
-|---|---|
-| `archive` | ISO path to the containing `.arc` |
-| `path` | Internal file path inside that archive |
-| `sha1` | Export-time base hash for change detection |
+- `path`: internal path inside the archive
+- `sha1`: export-time base hash for change detection
 
-### 2) Direct ISO file entry
-
-For a file stored directly on disc:
+2) Direct ISO file
 
 ```json
-"sys/main.dol": {
-  "iso": "sys/main.dol",
-  "sha1": "..."
+{
+  "sys/main.dol": {
+    "iso": "sys/main.dol",
+    "sha1": "..."
+  }
 }
 ```
 
-| Field | Meaning |
-|---|---|
-| `iso` | ISO-relative file path |
-| `sha1` | Export-time base hash for change detection |
+- `iso`: ISO-relative file path
+- `sha1`: export-time base hash
 
-### 3) Multi-source entry (`text/messages.json`)
-
-For consolidated BMG text:
+3) Consolidated text (`text/messages.json`)
 
 ```json
-"text/messages.json": {
-  "sources": [
-    {
-      "archive": "files/res/Msgus/bmgres.arc",
-      "path": "zel_00.bmg",
-      "sha1": "..."
-    }
-  ]
+{
+  "text/messages.json": {
+    "sources": [
+      { "path": "zel_00.bmg", "sha1": "..." }
+    ]
+  }
 }
 ```
 
-`sources[]` maps each source `.bmg` back to its archive and stores per-source hash metadata.
+- `sources[]` maps each BMG back to its archive via the hoisted `archives` map. Each source includes `path` and `sha1`.
 
----
+## Implementation notes (brief)
 
-## Advanced implementation notes
-
-This section groups the white-box details in one place.
-
-1. `arcs` includes top-level and nested archive paths discovered during export.
-2. `entries` hashes are SHA-1 strings under `sha1`.
-3. For direct ISO files, `iso` paths are stored relative to `files/` when applicable (for example `sys/main.dol`).
-4. Build currently relies mostly on `entries` (especially `archive`, `path`, `sources`, `sha1`) for change detection and archive reassembly.
-5. `text/messages.json` is handled specially: hashes are compared and rebuilt per source entry, not as one monolithic output hash.
+- The build reads `archives` to find which files belong to an archive; `entries` is a compact canonical listing used for per-file lookups.
+- When rebuilding archives, the tool prefers to repackage from modifications alone when the manifest proves all internal files are present; otherwise it fetches the original archive from the ISO and patches it.

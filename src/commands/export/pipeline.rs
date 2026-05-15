@@ -30,10 +30,7 @@ struct ArcEntry {
     data: Vec<u8>,
 }
 
-pub fn export_entries(
-    iso_path: &Path,
-    output_dir: &Path,
-) -> Result<(Map<String, Value>, Vec<String>), String> {
+pub fn export_entries(iso_path: &Path, output_dir: &Path) -> Result<Map<String, Value>, String> {
     fs::create_dir_all(output_dir).map_err(|e| format!("Create dir failed: {}", e))?;
 
     // Parse ISO
@@ -83,7 +80,7 @@ pub fn export_entries(
         "Exported {} BMG sources to text/messages.json",
         consolidated_bmg.sources.len()
     );
-    Ok((entries, arcs))
+    Ok(entries)
 }
 
 // ARC unpacking

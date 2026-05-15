@@ -2,8 +2,12 @@
 
 This document defines the mod folder layout and maps every path to its canonical ISO location.
 
-A mod folder is sparse: include only files you are changing.  
+A mod folder is sparse: include only files you are changing.
+
 Anything missing is sourced from the base ISO at build time.
+
+Direct files are written back to the output folder as-is; archive contents are
+repacked into their parent `.arc` files.
 
 ---
 
@@ -20,7 +24,8 @@ The build tool reverses this mechanically: folder name + `.arc` = original arc f
 
 ### Exception: `Msgus` BMG files are consolidated
 
-`files/res/Msgus/*.arc` does **not** follow arc-as-folder in mod output.  
+`files/res/Msgus/*.arc` does **not** follow arc-as-folder in mod output.
+
 Its `.bmg` sources are consolidated into a single editable file: `text/messages.json`
 
 Build splits `messages.json` back into per-archive `.bmg` sources automatically.
