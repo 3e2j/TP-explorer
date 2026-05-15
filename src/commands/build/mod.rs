@@ -10,8 +10,8 @@ Multi-stage pipeline:
 6) Write the full build output
 */
 
-mod assemble;
 mod archive_plan;
+mod assemble;
 mod compile;
 mod hash_check;
 mod output;
@@ -62,6 +62,12 @@ pub fn run(
 
     // Stage 1: Load manifest and compare hashes
     let modified_files = hash_check::find_modified_files(mod_path)?;
+    if modified_files.is_empty() {
+        if build_temp {
+            let _ = std::fs::remove_dir_all(output_path);
+        }
+        return Ok(());
+    }
     println!("Found {} modified files", modified_files.len());
 
     // Stage 2: Compile modified files to original formats

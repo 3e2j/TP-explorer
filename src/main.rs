@@ -78,12 +78,9 @@ fn main() {
         }
     };
 
-    match result {
-        Ok(_) => println!("Command completed successfully"),
-        Err(e) => {
-            eprintln!("Error: {}", e);
-            std::process::exit(1);
-        }
+    if let Err(e) = result {
+        eprintln!("Error: {}", e);
+        std::process::exit(1);
     }
 }
 
