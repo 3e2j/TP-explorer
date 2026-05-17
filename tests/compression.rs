@@ -20,10 +20,12 @@ fn decompress_gz2e_rejects_invalid_magic() {
 // Verifies passthrough GZ2E ISOs are copied intact when the FST offset looks valid.
 #[test]
 fn decompress_gz2e_copies_passthrough_isos() {
-    let mut bytes = vec![0u8; 0x430];
+    let mut bytes = vec![0u8; 0x440];
     bytes[0..4].copy_from_slice(b"GZ2E");
     bytes[4..6].copy_from_slice(b"01");
+    bytes[0x420..0x424].copy_from_slice(&0x1800u32.to_be_bytes());
     bytes[0x424..0x428].copy_from_slice(&0x2000u32.to_be_bytes());
+    bytes[0x428..0x42c].copy_from_slice(&0x2000u32.to_be_bytes());
     let mut input = Cursor::new(bytes.clone());
     let mut output = Vec::new();
     gz2e::decompress_gz2e(&mut input, &mut output).expect("decompress");

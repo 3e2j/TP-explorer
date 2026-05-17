@@ -37,10 +37,12 @@ fn prepare_for_export_returns_original_path_for_plain_iso() {
 // Verifies wrapped GZ2E ISOs are copied to a temp file and cleaned up afterward.
 #[test]
 fn prepare_for_export_cleans_up_temp_gz2e_copy() {
-    let mut bytes = vec![0u8; 0x430];
+    let mut bytes = vec![0u8; 0x440];
     bytes[0..4].copy_from_slice(b"GZ2E");
     bytes[4..6].copy_from_slice(b"01");
+    bytes[0x420..0x424].copy_from_slice(&0x1800u32.to_be_bytes());
     bytes[0x424..0x428].copy_from_slice(&0x2000u32.to_be_bytes());
+    bytes[0x428..0x42c].copy_from_slice(&0x2000u32.to_be_bytes());
     let iso_path = common::temp_file("gz2e-iso", "iso", &bytes);
     let prepared = iso_source::prepare_for_export(&iso_path).unwrap();
     let temp_path = prepared.path().to_path_buf();
