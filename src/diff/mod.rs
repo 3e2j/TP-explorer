@@ -1,3 +1,9 @@
+//! Diffing helpers for comparing ISO contents against a mod folder.
+//!
+//! The public entry point compares file hashes and reports added or changed
+//! files. Internal helpers handle ISO wrapper decoding, folder hashing, and
+//! path discovery.
+
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
@@ -7,7 +13,7 @@ use std::time::Instant;
 use walkdir::WalkDir;
 
 use crate::formats::compression::gz2e;
-use crate::formats::iso::iso;
+use crate::formats::iso::iso_read;
 
 const COPY_BUF_SIZE: usize = 1024 * 1024;
 const OUTPUT_DIR: &str = "output";
@@ -142,7 +148,7 @@ fn diff_with_iso_path(iso_path: &Path, files_dir: &Path) -> Result<String, Strin
     let output_root = PathBuf::from(OUTPUT_DIR);
 
     let iso_map_start = Instant::now();
-    let iso_map = iso::build_iso_hash_map(iso_path)?;
+    let iso_map = iso_read::build_iso_hash_map(iso_path)?;
     let iso_map_elapsed = iso_map_start.elapsed();
 
     let folder_map_start = Instant::now();

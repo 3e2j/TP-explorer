@@ -1,14 +1,15 @@
-/*
-Build command: reverse of export.
-
-Multi-stage pipeline:
-1) Load manifest and compare file hashes (original vs mod)
-2) Compile modified files (JSON→BMG, etc.)
-3) Buffer direct files
-4) Resolve archive-backed files and fetch missing archive data
-5) Assemble modified archives
-6) Write the full build output
-*/
+//! Build pipeline for TPMT.
+//!
+//! This is the reverse of export: compare the mod folder against
+//! `manifest.json`, compile edited files, rebuild archives, and write the
+//! final output tree and optional patched ISO.
+//!
+//! The submodules mirror the pipeline stages:
+//! - `hash_check` finds modified files
+//! - `compile` converts edited JSON/text back into binary formats
+//! - `archive_plan` determines how archive-backed files should be sourced
+//! - `assemble` repacks ARC archives
+//! - `output` writes the final filesystem and ISO outputs
 
 pub mod archive_plan;
 pub mod assemble;

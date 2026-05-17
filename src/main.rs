@@ -1,3 +1,8 @@
+//! TPMT command-line entry point.
+//!
+//! The binary dispatches `export`, `build`, and their CLI arguments into the
+//! library command pipeline.
+
 use std::{env, process};
 use tpmt::commands;
 

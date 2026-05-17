@@ -14,7 +14,7 @@ Stages:
 
 use crate::commands::export::consolidated_bmg::{BmgSource, ConsolidatedBmg};
 use crate::formats::bmg::Bmg;
-use crate::formats::iso::iso;
+use crate::formats::iso::iso_read;
 use crate::formats::rarc::Rarc;
 use crate::utils::{read_bytes_at, sha1_hex};
 use serde_json::{json, Map, Value};
@@ -34,7 +34,7 @@ pub fn export_entries(iso_path: &Path, output_dir: &Path) -> Result<Map<String, 
     fs::create_dir_all(output_dir).map_err(|e| format!("Create dir failed: {}", e))?;
 
     // Parse ISO
-    let files = iso::parse_iso_files(iso_path)?;
+    let files = iso_read::parse_iso_files(iso_path)?;
     let mut iso_file =
         std::fs::File::open(iso_path).map_err(|e| format!("Failed to open ISO: {e}"))?;
 

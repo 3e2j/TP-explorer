@@ -1,6 +1,6 @@
 use crate::commands::build::assemble::BuildOutput;
 use crate::commands::build::compile::CompiledFile;
-use crate::formats::iso::iso;
+use crate::formats::iso::iso_read;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -53,7 +53,7 @@ pub fn rebuild_iso_from_outputs(
         replacements.insert(path.clone(), bytes.clone());
     }
 
-    let all_iso_files = iso::parse_iso_files(iso_path)?;
+    let all_iso_files = iso_read::parse_iso_files(iso_path)?;
     let iso_out_path = Path::new(iso_out);
     crate::formats::iso::iso_rebuild::rebuild_iso_with_files(
         iso_path,

@@ -1,18 +1,18 @@
-/*
-Export command entrypoint.
-
-High-level sequence:
-1) Prepare ISO source (decode wrapper when needed)
-2) Decode files via ordered pipeline
-3) Write manifest.json from decoded entries
-*/
+//! Export pipeline for TPMT.
+//!
+//! This command extracts a vanilla ISO into the mod folder layout, decodes
+//! supported formats into editable representations, and writes
+//! `manifest.json` describing how the exported files map back to the disc.
+//!
+//! The submodules handle source preparation, per-file decoding, consolidated
+//! BMG export, and manifest generation.
 
 pub mod consolidated_bmg;
 pub mod iso_source;
 pub mod manifest;
 pub mod pipeline;
 
-use crate::formats::iso::iso;
+use crate::formats::iso::iso_read;
 use std::fs;
 use std::path::Path;
 
@@ -37,7 +37,7 @@ pub fn run(iso_path: &str, output_dir: &str) -> Result<(), String> {
 }
 
 fn run_export_pipeline(iso_path: &Path, output_dir: &Path) -> Result<(), String> {
-    let iso_files = iso::parse_iso_files(iso_path)?;
+    let iso_files = iso_read::parse_iso_files(iso_path)?;
     println!("Found {} files in ISO", iso_files.len());
 
     let entries = pipeline::export_entries(iso_path, output_dir)?;

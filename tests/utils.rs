@@ -20,12 +20,6 @@ fn read_u8_at_returns_none_out_of_bounds() {
     assert_eq!(read_u8_at(&[0xAA], 1), None);
 }
 
-// Verifies 24-bit reads decode three-byte offsets used by archive formats.
-#[test]
-fn read_u24_be_decodes_three_byte_values() {
-    assert_eq!(read_u24_be(&[0x01, 0x23, 0x45], 0), Some(0x012345));
-}
-
 // Verifies hex formatting preserves byte order and lowercase output.
 #[test]
 fn bytes_to_hex_formats_all_bytes() {

@@ -1,8 +1,8 @@
-/*
-Shared byte-reading utilities.
-
-These helpers centralize endian decoding used by multiple parser modules.
-*/
+//! Shared byte and file helpers.
+//!
+//! These utilities centralize endian decoding, hex conversion, file-range
+//! reads, and file-at-offset writes used by multiple parser and pipeline
+//! modules.
 
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -71,18 +71,6 @@ pub fn write_u32_be(data: &mut [u8], offset: usize, value: u32) {
 /// Reads a byte at `offset` without panicking when the slice is too short.
 pub fn read_u8_at(data: &[u8], offset: usize) -> Option<u8> {
     data.get(offset).copied()
-}
-
-/// Reads a big-endian 24-bit value from a byte slice.
-pub fn read_u24_be(data: &[u8], offset: usize) -> Option<u32> {
-    if offset + 3 > data.len() {
-        return None;
-    }
-    Some(
-        ((data[offset] as u32) << 16)
-            | ((data[offset + 1] as u32) << 8)
-            | (data[offset + 2] as u32),
-    )
 }
 
 /// Converts raw bytes to lowercase hex.
@@ -196,12 +184,6 @@ mod tests {
         assert_eq!(read_u8_at(&[0xAA], 1), None);
     }
 
-    // Verifies 24-bit reads are decoded consistently with the archive and BMG parsers.
-    #[test]
-    fn read_u24_be_decodes_three_byte_values() {
-        assert_eq!(read_u24_be(&[0x01, 0x23, 0x45], 0), Some(0x012345));
-    }
-
     // Verifies byte-to-hex formatting preserves ordering and lowercase output.
     #[test]
     fn bytes_to_hex_formats_all_bytes_in_order() {
@@ -234,10 +216,7 @@ mod tests {
     // Verifies SHA-1 formatting matches the hex digest used by manifest hashing.
     #[test]
     fn sha1_hex_formats_bytes() {
-        assert_eq!(
-            sha1_hex(b"abc"),
-            "a9993e364706816aba3e25717850c26c9cd0d89d"
-        );
+        assert_eq!(sha1_hex(b"abc"), "a9993e364706816aba3e25717850c26c9cd0d89d");
     }
 
     // Verifies file-range reads extract the requested bytes without consuming the whole file.

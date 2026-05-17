@@ -209,7 +209,7 @@ impl Rarc {
         header[0..4].copy_from_slice(MAGIC_RARC);
         write_u32_be(&mut header, 0x04, total_size as u32);
         write_u32_be(&mut header, 0x08, data_header_offset as u32);
-        // 0x0C: file data list offset relative to data_header_offset (matches Python)
+        // 0x0C: file data list offset relative to data_header_offset
         write_u32_be(
             &mut header,
             0x0C,
@@ -223,7 +223,7 @@ impl Rarc {
         write_u32_be(&mut header, 0x18, 0u32);
         // 0x1C: unknown_1, always 0
 
-        // Build data header (0x20 bytes to match Python's full data header)
+        // Build data header (0x20 bytes)
         let mut data_header = vec![0u8; DATA_HDR_MIN_BYTES];
         write_u32_be(
             &mut data_header,
@@ -262,7 +262,7 @@ impl Rarc {
         let mut nodes_data = vec![0u8; self.nodes.len() * NODE_ENTRY_SIZE];
         for (i, node) in self.nodes.iter().enumerate() {
             let offset = i * NODE_ENTRY_SIZE;
-            // type_str is 4 bytes, space-padded if shorter (matches Python)
+            // type_str is 4 bytes, space-padded if shorter
             let mut type_bytes = [b' '; 4];
             let src = node.type_str.as_bytes();
             let copy_len = src.len().min(4);
@@ -274,7 +274,6 @@ impl Rarc {
                 offset + NODE_NAME_OFFSET_FIELD,
                 node_name_offset as u32,
             );
-            // Name hash: same algorithm used by Python's RARCNode.save_changes()
             let name_hash = rarc_name_hash(&node.name);
             write_u16_be(&mut nodes_data, offset + 0x08, name_hash);
             write_u16_be(
@@ -297,7 +296,7 @@ impl Rarc {
             // File ID at offset 0x00 (u16): use index when ids are synced
             write_u16_be(&mut file_entries_data, offset + 0x00, i as u16);
 
-            // Name hash at offset 0x02: Python computes the real hash
+            // Name hash at offset 0x02
             let name_hash = rarc_name_hash(&entry.name);
             write_u16_be(
                 &mut file_entries_data,
@@ -329,7 +328,6 @@ impl Rarc {
                         node_idx,
                     );
                 }
-                // Python forces data_size = 0x10 for all directory entries
                 write_u32_be(
                     &mut file_entries_data,
                     offset + FILE_ENTRY_DATA_SIZE_FIELD,
@@ -347,12 +345,11 @@ impl Rarc {
                     entry.data_size,
                 );
             }
-            // Offset 0x10: runtime data pointer, always 0 on disk (Python writes 0 here explicitly)
+            // Offset 0x10: runtime data pointer, always 0 on disk
             write_u32_be(&mut file_entries_data, offset + 0x10, 0);
         }
 
         // Backfill string_list_size at data header +0x10 now that we know file_data_offset.
-        // Python: self.string_list_size = self.file_data_list_offset - self.string_list_offset
         let string_list_size = file_data_offset - string_list_offset;
         write_u32_be(&mut data_header, 0x10, string_list_size as u32);
 
@@ -381,7 +378,6 @@ impl Rarc {
 }
 
 /// Name hash algorithm used by RARC for both nodes and file entries.
-/// Python: hash *= 3; hash += ord(char); hash &= 0xFFFF
 fn rarc_name_hash(name: &str) -> u16 {
     let mut hash: u32 = 0;
     for c in name.chars() {
@@ -557,11 +553,9 @@ impl StringTable {
             strings: std::collections::BTreeMap::new(),
             data: Vec::new(),
         };
-        // Python always writes "." at offset 0 and ".." at offset 2 first,
-        // before any node/entry names.  Games rely on these fixed positions.
-        table.add("."); // offset 0: "." + NUL = 2 bytes
-        table.add(".."); // offset 2: ".." + NUL = 3 bytes
-                         // next_string_offset in Python starts at 5 after this.
+        // Reserve "." and ".." first so they keep their canonical offsets.
+        table.add(".");
+        table.add("..");
         table
     }
 

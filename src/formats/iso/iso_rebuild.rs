@@ -1,6 +1,6 @@
 //! ISO rebuilding with proper FST updates (based on GCFT approach)
 
-use crate::formats::iso::iso::{read_u32_at, IsoFileEntry};
+use crate::formats::iso::iso_read::{read_u32_at, IsoFileEntry};
 use crate::utils::write_u32_be_at;
 use std::collections::HashMap;
 use std::fs::File;

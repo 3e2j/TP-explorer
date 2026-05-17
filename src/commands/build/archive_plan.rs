@@ -1,5 +1,5 @@
 use crate::commands::build::compile::CompiledFile;
-use crate::formats::iso::iso;
+use crate::formats::iso::iso_read;
 use crate::utils::read_bytes_at;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -62,7 +62,7 @@ pub fn plan_archive_inputs(
 
     let mut iso_file =
         std::fs::File::open(iso_path).map_err(|e| format!("Open ISO failed: {}", e))?;
-    let iso_entries = iso::parse_iso_files(iso_path)?;
+    let iso_entries = iso_read::parse_iso_files(iso_path)?;
     let mut inputs = Vec::new();
 
     for arc_iso_path in arc_paths {
@@ -86,8 +86,7 @@ pub fn plan_archive_inputs(
             .iter()
             .find(|f| f.path == arc_iso_path)
             .ok_or(format!("Arc not found in ISO: {}", arc_iso_path))?;
-        let arc_bytes =
-            read_bytes_at(&mut iso_file, arc_iso_entry.offset, arc_iso_entry.size)?;
+        let arc_bytes = read_bytes_at(&mut iso_file, arc_iso_entry.offset, arc_iso_entry.size)?;
 
         inputs.push(ArchiveInput::FromIso {
             arc_iso_path,
@@ -195,13 +194,17 @@ mod tests {
         bytes[0x424..0x428].copy_from_slice(&(fst_offset as u32).to_be_bytes());
         bytes[0x428..0x42C].copy_from_slice(&(fst_size as u32).to_be_bytes());
         bytes[fst_offset..fst_offset + 12].copy_from_slice(&[
-            0x01, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x02,
+            0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02,
         ]);
         bytes[fst_offset + 12..fst_offset + 24].copy_from_slice(&[
-            0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x12, 0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x12,
+            0x00,
             ((file_bytes.len() as u32) >> 24) as u8,
             ((file_bytes.len() as u32) >> 16) as u8,
             ((file_bytes.len() as u32) >> 8) as u8,
@@ -209,7 +212,8 @@ mod tests {
         ]);
         bytes[fst_offset + 24..fst_offset + 24 + name_bytes.len()].copy_from_slice(&name_bytes);
         bytes[file_offset..file_offset + file_bytes.len()].copy_from_slice(file_bytes);
-        let path = std::env::temp_dir().join(format!("tpmt-archive-plan-{}.iso", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("tpmt-archive-plan-{}.iso", std::process::id()));
         let _ = std::fs::remove_file(&path);
         std::fs::write(&path, bytes).expect("write iso");
         path
@@ -234,7 +238,10 @@ mod tests {
             },
             compiled_bytes: b"new".to_vec(),
         }];
-        assert!(matches!(plan_archive_inputs(&compiled, &mod_dir, &iso_path).unwrap()[0], ArchiveInput::FromModsOnly { .. }));
+        assert!(matches!(
+            plan_archive_inputs(&compiled, &mod_dir, &iso_path).unwrap()[0],
+            ArchiveInput::FromModsOnly { .. }
+        ));
     }
 
     // Verifies missing archive mappings fail early so the build does not guess at archive layout.
