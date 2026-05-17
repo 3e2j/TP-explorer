@@ -25,12 +25,6 @@ pub struct IsoFileEntry {
     pub fst_index: usize, // FST entry index for direct FST updates
 }
 
-fn read_u32_be(bytes: &[u8], offset: usize) -> Option<u32> {
-    let end = offset.checked_add(4)?;
-    let slice = bytes.get(offset..end)?;
-    Some(u32::from_be_bytes([slice[0], slice[1], slice[2], slice[3]]))
-}
-
 pub fn read_u32_at(file: &mut File, offset: u64) -> Result<u32, String> {
     let mut buf = [0u8; 4];
     file.seek(SeekFrom::Start(offset))
@@ -42,9 +36,9 @@ pub fn read_u32_at(file: &mut File, offset: u64) -> Result<u32, String> {
 
 fn parse_fst_entry(fst: &[u8], index: usize) -> Option<FstEntry> {
     let base = index.checked_mul(FST_ENTRY_SIZE)?;
-    let flags_and_name = read_u32_be(fst, base)?;
-    let data_offset_or_parent = read_u32_be(fst, base + 4)?;
-    let size_or_next_index = read_u32_be(fst, base + 8)?;
+    let flags_and_name = u32::from_be_bytes(fst.get(base..base + 4)?.try_into().ok()?);
+    let data_offset_or_parent = u32::from_be_bytes(fst.get(base + 4..base + 8)?.try_into().ok()?);
+    let size_or_next_index = u32::from_be_bytes(fst.get(base + 8..base + 12)?.try_into().ok()?);
     Some(FstEntry {
         is_dir: (flags_and_name & 0xFF00_0000) != 0,
         name_offset: (flags_and_name & 0x00FF_FFFF) as usize,

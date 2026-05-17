@@ -8,9 +8,9 @@ High-level sequence:
 */
 
 pub mod consolidated_bmg;
-mod iso_source;
-mod manifest;
-mod pipeline;
+pub mod iso_source;
+pub mod manifest;
+pub mod pipeline;
 
 use crate::formats::iso::iso;
 use std::fs;

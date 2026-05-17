@@ -8,6 +8,22 @@ use crate::utils::bytes_to_hex;
 use serde_json::{json, Value};
 use std::fs;
 
+/// Converts a parsed BMG into the editable JSON form.
+///
+/// # Examples
+///
+/// ```
+/// use tpmt::formats::bmg::parser::{Bmg, BmgMessage};
+/// use tpmt::formats::bmg::to_json::bmg_to_json;
+///
+/// let bmg = Bmg {
+///     encoding: "shift-jis".to_string(),
+///     messages: vec![BmgMessage { id: (1, 0), attributes: vec![0; 16], text: vec![b"Hi".to_vec()] }],
+///     attribute_length: 20,
+///     additional_sections: vec![],
+/// };
+/// assert_eq!(bmg_to_json(&bmg).unwrap()[1]["ID"], "1, 0");
+/// ```
 pub fn bmg_to_json(bmg: &Bmg) -> Result<Value, String> {
     let mut messages = vec![json!({
         "message_count": bmg.messages.len(),
@@ -71,6 +87,7 @@ fn decode_text(bytes: &[u8], encoding: &str) -> Result<String, String> {
     }
 }
 
+/// Writes pretty-printed JSON to disk.
 pub fn write_json(json: &Value, path: &str) -> Result<(), String> {
     let json_str =
         serde_json::to_string_pretty(json).map_err(|e| format!("Serialize error: {}", e))?;

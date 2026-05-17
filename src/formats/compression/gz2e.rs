@@ -9,6 +9,14 @@ use std::io::{Read, Seek, SeekFrom, Write};
 
 const MAGIC: &[u8; 4] = b"GZ2E";
 
+/// Returns true when the 4-byte header matches the GZ2E wrapper magic.
+///
+/// # Examples
+///
+/// ```
+/// use tpmt::formats::compression::gz2e::is_gz2e;
+/// assert!(is_gz2e(b"GZ2E"));
+/// ```
 pub fn is_gz2e(data: &[u8]) -> bool {
     data.len() >= 4 && &data[0..4] == MAGIC
 }

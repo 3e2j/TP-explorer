@@ -1,20 +1,13 @@
 //! ISO rebuilding with proper FST updates (based on GCFT approach)
 
 use crate::formats::iso::iso::{read_u32_at, IsoFileEntry};
+use crate::utils::write_u32_be_at;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
 const FST_ENTRY_SIZE: usize = 12;
-
-fn write_u32_be(file: &mut File, offset: u64, value: u32) -> Result<(), String> {
-    file.seek(SeekFrom::Start(offset))
-        .map_err(|e| format!("Seek failed: {e}"))?;
-    file.write_all(&value.to_be_bytes())
-        .map_err(|e| format!("Write failed: {e}"))?;
-    Ok(())
-}
 
 fn pad_to_alignment(file: &mut File, alignment: u64) -> Result<(), String> {
     let current = file
@@ -146,7 +139,7 @@ pub fn rebuild_iso_with_files(
         .write_all(&dol_buf)
         .map_err(|e| format!("Write DOL failed: {e}"))?;
 
-    write_u32_be(&mut output, 0x420, new_dol_offset)?;
+    write_u32_be_at(&mut output, 0x420, new_dol_offset)?;
 
     // Position and write FST
     output
@@ -166,9 +159,9 @@ pub fn rebuild_iso_with_files(
         .map_err(|e| format!("Write FST failed: {e}"))?;
 
     let new_fst_size = original_fst.len() as u32;
-    write_u32_be(&mut output, 0x424, new_fst_offset)?;
-    write_u32_be(&mut output, 0x428, new_fst_size)?;
-    write_u32_be(&mut output, 0x42C, new_fst_size)?;
+    write_u32_be_at(&mut output, 0x424, new_fst_offset)?;
+    write_u32_be_at(&mut output, 0x428, new_fst_size)?;
+    write_u32_be_at(&mut output, 0x42C, new_fst_size)?;
 
     // Position for files
     output

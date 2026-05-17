@@ -27,6 +27,20 @@ use serde_json::Value;
 use crate::formats::bmg::parser::BmgMessage;
 use crate::formats::bmg::parser::BmgSection;
 
+/// Converts the editable BMG JSON form back into a binary BMG structure.
+///
+/// # Examples
+///
+/// ```
+/// use serde_json::json;
+/// use tpmt::formats::bmg::from_json::json_to_bmg;
+///
+/// let json = json!([
+///   {"message_count": 1},
+///   {"ID": "1, 0", "attributes": "00000000000000000000000000000000", "text": ["Hello"]}
+/// ]);
+/// assert!(json_to_bmg(&json, "shift-jis").is_ok());
+/// ```
 pub fn json_to_bmg(val: &Value, encoding: &str) -> Result<Bmg, String> {
     let arr = val.as_array().ok_or("Expected JSON array")?;
     if arr.is_empty() {

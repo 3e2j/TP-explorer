@@ -1,87 +1,113 @@
-use std::env;
+use std::{env, process};
 use tpmt::commands;
 
+/// Program entry-point
 fn main() {
-    let args: Vec<String> = env::args().collect();
-
-    if args.len() < 2 {
-        print_usage();
-        return;
+    if let Err(error) = run() {
+        eprintln!("Error: {}", error);
+        process::exit(1);
     }
+}
 
-    let result = match args[1].as_str() {
-        "export" => {
-            if args.len() < 4 {
-                eprintln!("Usage: tpmt export <iso_path> <output_dir>");
-                return;
-            }
-            commands::export::run(&args[2], &args[3])
-        }
-        "build" => {
-            if args.len() < 4 {
-                eprintln!(
-                    "Usage: tpmt build <iso_path> <mod_dir> [output_dir] [--iso-output <iso_output>]"
-                );
-                return;
-            }
-
-            let mut output_dir: Option<&str> = None;
-            let mut iso_output: Option<&str> = None;
-            let mut i = 4;
-
-            while i < args.len() {
-                match args[i].as_str() {
-                    "--iso-output" => {
-                        if i + 1 >= args.len() {
-                            eprintln!(
-                                "Usage: tpmt build <iso_path> <mod_dir> [output_dir] [--iso-output <iso_output>]"
-                            );
-                            return;
-                        }
-                        iso_output = Some(&args[i + 1]);
-                        i += 2;
-                    }
-                    "--help" | "-h" => {
-                        print_usage();
-                        return;
-                    }
-                    value if output_dir.is_none() => {
-                        output_dir = Some(value);
-                        i += 1;
-                    }
-                    value if iso_output.is_none() => {
-                        iso_output = Some(value);
-                        i += 1;
-                    }
-                    other => {
-                        eprintln!("Unexpected argument: {}", other);
-                        eprintln!(
-                            "Usage: tpmt build <iso_path> <mod_dir> [output_dir] [--iso-output <iso_output>]"
-                        );
-                        return;
-                    }
-                }
-            }
-
-            if output_dir.is_none() && iso_output.is_none() {
-                eprintln!(
-                    "Usage: tpmt build <iso_path> <mod_dir> [output_dir] [--iso-output <iso_output>]"
-                );
-                return;
-            }
-
-            commands::build::run(&args[3], &args[2], output_dir, iso_output)
-        }
-        _ => {
-            print_usage();
-            return;
-        }
+/// Command-line inputs -> operations
+fn run() -> Result<(), String> {
+    let args: Vec<String> = env::args().skip(1).collect();
+    let Some(command) = args.first().map(String::as_str) else {
+        print_usage();
+        return Ok(());
     };
 
-    if let Err(e) = result {
-        eprintln!("Error: {}", e);
-        std::process::exit(1);
+    match command {
+        "export" => run_export(&args[1..]),
+        "build" => run_build(&args[1..]),
+        _ => {
+            print_usage();
+            Ok(())
+        }
     }
+}
+
+/// Exports and converts ISO contents to a folder of choosing in human-readable format.
+///
+/// See below for more info on file structure.
+///
+/// ---
+#[doc = include_str!("../docs/file-structure.md")]
+fn run_export(args: &[String]) -> Result<(), String> {
+    if args.len() != 2 {
+        print_export_usage();
+        return Ok(());
+    }
+
+    commands::export::run(&args[0], &args[1])
+}
+
+/// Builds a mod directory into a ready-to-patch ISO format replicating the
+/// games original structure. Optionally patches the "build" into the ISO
+/// and exports this to an ISO-output.
+///
+/// Original ISO is left unchanged unless specified as the export path.
+fn run_build(args: &[String]) -> Result<(), String> {
+    let Some(options) = parse_build_options(args) else {
+        print_build_usage();
+        return Ok(());
+    };
+
+    commands::build::run(
+        options.mod_dir,
+        options.iso_path,
+        options.output_dir,
+        options.iso_output,
+    )
+}
+
+struct BuildOptions<'a> {
+    iso_path: &'a str,
+    mod_dir: &'a str,
+    output_dir: Option<&'a str>,
+    iso_output: Option<&'a str>,
+}
+
+fn parse_build_options(args: &[String]) -> Option<BuildOptions<'_>> {
+    if args.len() < 2 {
+        return None;
+    }
+
+    let iso_path = args[0].as_str();
+    let mod_dir = args[1].as_str();
+    let mut output_dir = None;
+    let mut iso_output = None;
+    let mut i = 2;
+
+    while i < args.len() {
+        let value = args[i].as_str();
+        match value {
+            "--help" | "-h" => return None,
+            "--iso-output" => {
+                let Some(next) = args.get(i + 1) else {
+                    return None;
+                };
+                iso_output = Some(next.as_str());
+                i += 2;
+            }
+            _ if output_dir.is_none() => {
+                output_dir = Some(value);
+                i += 1;
+            }
+            _ if iso_output.is_none() => {
+                iso_output = Some(value);
+                i += 1;
+            }
+            _ => return None,
+        }
+    }
+
+    Some(BuildOptions {
+        iso_path,
+        mod_dir,
+        output_dir,
+        iso_output,
+    })
 }
 
 fn print_usage() {
@@ -89,12 +115,72 @@ fn print_usage() {
     println!();
     println!("Usage:");
     println!("  tpmt export <iso_path> <output_dir>");
-    println!("    Extract ISO files into human-readable folder structure");
-    println!("    Generates manifest.json for mod resolution");
-    println!();
     println!("  tpmt build <iso_path> <mod_dir> [output_dir] [--iso-output <iso_output>]");
-    println!("    Build a patched ISO from a mod folder and vanilla ISO");
-    println!("    With output_dir only: just build");
-    println!("    With --iso-output only: build to a temp dir, export ISO, then clean up");
-    println!("    With both: build and export");
+}
+
+fn print_export_usage() {
+    eprintln!(
+        "Export game assets from an ISO to a directory
+
+        Usage: tpmt export <ISO_PATH> <OUTPUT_DIR>
+
+        Arguments:
+        <ISO_PATH>      Path to the input ISO file
+        <OUTPUT_DIR>    Directory to write exported assets into
+
+        Options:
+        -h, --help  Print help"
+    );
+}
+
+fn print_build_usage() {
+    eprintln!(
+        "Build a mod and optionally repack it into an ISO
+
+        Usage: tpmt build <ISO_PATH> <MOD_DIR> [OUTPUT_DIR] [OPTIONS]
+
+        Arguments:
+        <ISO_PATH>      Path to the source ISO file
+        <MOD_DIR>       Directory containing the mod files to build
+        [OUTPUT_DIR]    Directory to write build output (default: current directory)
+
+        Options:
+            --iso-output <ISO_OUTPUT>  Path for the repacked ISO output file
+        -h, --help                     Print help"
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(values: &[&str]) -> Vec<String> {
+        values.iter().map(|s| s.to_string()).collect()
+    }
+
+    // Verifies the build parser accepts the documented positional arguments.
+    #[test]
+    fn parse_build_options_accepts_required_arguments() {
+        assert!(parse_build_options(&args(&["iso.iso", "mod_dir"])).is_some());
+    }
+
+    // Verifies optional output and ISO output flags are captured in order.
+    #[test]
+    fn parse_build_options_parses_optional_outputs() {
+        let binding = args(&["iso.iso", "mod_dir", "out", "--iso-output", "patched.iso"]);
+        let parsed = parse_build_options(&binding).map(|o| (o.output_dir, o.iso_output));
+        assert_eq!(parsed, Some((Some("out"), Some("patched.iso"))));
+    }
+
+    // Verifies help flags short-circuit the build parser instead of treating them as paths.
+    #[test]
+    fn parse_build_options_rejects_help_flag() {
+        assert!(parse_build_options(&args(&["iso.iso", "mod_dir", "--help"])).is_none());
+    }
+
+    // Verifies missing required arguments return no build configuration.
+    #[test]
+    fn parse_build_options_rejects_missing_paths() {
+        assert!(parse_build_options(&args(&["iso.iso"])).is_none());
+    }
 }

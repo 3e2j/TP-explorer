@@ -1,8 +1,8 @@
 use crate::commands::build::compile::CompiledFile;
 use crate::formats::iso::iso;
+use crate::utils::read_bytes_at;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
 #[derive(Clone, Debug)]
@@ -87,7 +87,7 @@ pub fn plan_archive_inputs(
             .find(|f| f.path == arc_iso_path)
             .ok_or(format!("Arc not found in ISO: {}", arc_iso_path))?;
         let arc_bytes =
-            read_iso_entry_bytes(&mut iso_file, arc_iso_entry.offset, arc_iso_entry.size)?;
+            read_bytes_at(&mut iso_file, arc_iso_entry.offset, arc_iso_entry.size)?;
 
         inputs.push(ArchiveInput::FromIso {
             arc_iso_path,
@@ -173,15 +173,85 @@ fn can_rebuild_archive_without_iso(
         .all(|path| modifications.contains_key(path)))
 }
 
-fn read_iso_entry_bytes(
-    file: &mut std::fs::File,
-    offset: u64,
-    size: u64,
-) -> Result<Vec<u8>, String> {
-    file.seek(SeekFrom::Start(offset))
-        .map_err(|e| format!("Seek failed: {}", e))?;
-    let mut out = vec![0u8; size as usize];
-    file.read_exact(&mut out)
-        .map_err(|e| format!("Read failed: {}", e))?;
-    Ok(out)
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::commands::build::compile::CompiledFile;
+    use crate::commands::build::hash_check::ModifiedFile;
+
+    fn temp_dir(name: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!("tpmt-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&path);
+        std::fs::create_dir_all(&path).expect("create temp dir");
+        path
+    }
+
+    fn build_single_file_iso(file_name: &str, file_bytes: &[u8]) -> std::path::PathBuf {
+        let fst_offset = 0x1000usize;
+        let file_offset = 0x1200usize;
+        let name_bytes = format!("{file_name}\0").into_bytes();
+        let fst_size = 24 + name_bytes.len();
+        let mut bytes = vec![0u8; file_offset + file_bytes.len()];
+        bytes[0x424..0x428].copy_from_slice(&(fst_offset as u32).to_be_bytes());
+        bytes[0x428..0x42C].copy_from_slice(&(fst_size as u32).to_be_bytes());
+        bytes[fst_offset..fst_offset + 12].copy_from_slice(&[
+            0x01, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x02,
+        ]);
+        bytes[fst_offset + 12..fst_offset + 24].copy_from_slice(&[
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x12, 0x00,
+            ((file_bytes.len() as u32) >> 24) as u8,
+            ((file_bytes.len() as u32) >> 16) as u8,
+            ((file_bytes.len() as u32) >> 8) as u8,
+            (file_bytes.len() as u32) as u8,
+        ]);
+        bytes[fst_offset + 24..fst_offset + 24 + name_bytes.len()].copy_from_slice(&name_bytes);
+        bytes[file_offset..file_offset + file_bytes.len()].copy_from_slice(file_bytes);
+        let path = std::env::temp_dir().join(format!("tpmt-archive-plan-{}.iso", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        std::fs::write(&path, bytes).expect("write iso");
+        path
+    }
+
+    // Verifies archive entries with complete manifest coverage can be rebuilt from mods only.
+    #[test]
+    fn plan_archive_inputs_uses_mods_only_when_manifest_is_complete() {
+        let mod_dir = temp_dir("archive-plan-mod");
+        std::fs::write(
+            mod_dir.join("manifest.json"),
+            r#"{"archives":{"files/a.arc":{"foo.txt":{"path":"foo.txt","sha1":"abc"}}},"entries":{}}"#,
+        )
+        .expect("manifest");
+        let iso_path = build_single_file_iso("a.arc", b"ARC");
+        let compiled = vec![CompiledFile {
+            mod_file: ModifiedFile {
+                friendly_path: "a.arc/foo.txt".to_string(),
+                mod_path: "ignored".to_string(),
+                archive: Some("files/a.arc".to_string()),
+                internal_path: Some("foo.txt".to_string()),
+            },
+            compiled_bytes: b"new".to_vec(),
+        }];
+        assert!(matches!(plan_archive_inputs(&compiled, &mod_dir, &iso_path).unwrap()[0], ArchiveInput::FromModsOnly { .. }));
+    }
+
+    // Verifies missing archive mappings fail early so the build does not guess at archive layout.
+    #[test]
+    fn plan_archive_inputs_rejects_missing_manifest_archives() {
+        let mod_dir = temp_dir("archive-plan-missing");
+        std::fs::write(mod_dir.join("manifest.json"), r#"{"entries":{}}"#).expect("manifest");
+        let iso_path = build_single_file_iso("a.arc", b"ARC");
+        let compiled = vec![CompiledFile {
+            mod_file: ModifiedFile {
+                friendly_path: "a.arc/foo.txt".to_string(),
+                mod_path: "ignored".to_string(),
+                archive: Some("files/a.arc".to_string()),
+                internal_path: Some("foo.txt".to_string()),
+            },
+            compiled_bytes: b"new".to_vec(),
+        }];
+        assert!(plan_archive_inputs(&compiled, &mod_dir, &iso_path).is_err());
+    }
 }

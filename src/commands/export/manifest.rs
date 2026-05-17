@@ -6,6 +6,19 @@ use std::path::Path;
 /// Write manifest.json. This writes a hoisted "archives" map keyed by
 /// archive ISO path. Each archive maps to an object of friendly_path -> entry
 /// (the full manifest entry). The top-level "arcs" list is omitted.
+/// Writes `manifest.json` for the exported mod folder.
+///
+/// # Examples
+///
+/// ```no_run
+/// use serde_json::{json, Map};
+/// use std::path::Path;
+/// use tpmt::commands::export::manifest::write_manifest;
+///
+/// let mut entries = Map::new();
+/// entries.insert("sys/main.dol".into(), json!({"iso": "sys/main.dol", "sha1": "abc"}));
+/// write_manifest(Path::new("mod"), entries).unwrap();
+/// ```
 pub fn write_manifest(output_dir: &Path, entries: Map<String, Value>) -> Result<(), String> {
     // Build a hoisted archives map: archive -> (friendly_path -> entry)
     let mut archives_map: BTreeMap<String, Map<String, Value>> = BTreeMap::new();
@@ -66,4 +79,16 @@ fn cloned_entry_without_archive(entry: &Value) -> Value {
         obj.remove("archive");
     }
     cloned
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Verifies direct manifest entries stay in the top-level entries map.
+    #[test]
+    fn cloned_entry_without_archive_removes_archive_field() {
+        let entry = json!({"archive": "files/a.arc", "path": "foo.txt", "sha1": "abc"});
+        assert!(cloned_entry_without_archive(&entry).get("archive").is_none());
+    }
 }

@@ -7,6 +7,7 @@ Special handling for consolidated BMG (text/messages.json):
 */
 
 use crate::commands::export::consolidated_bmg::ConsolidatedBmg;
+use crate::utils::sha1_hex;
 use serde_json::Value;
 use std::fs;
 use std::path::Path;
@@ -184,16 +185,22 @@ fn compute_file_hash(path: &Path) -> Result<String, String> {
     Ok(sha1_hex(&bytes))
 }
 
-fn sha1_hex(bytes: &[u8]) -> String {
-    let mut hasher = sha1::Sha1::new();
-    hasher.update(bytes);
-    hasher.digest().to_string()
-}
-
 fn read_manifest_sha1(v: &Value) -> Option<&str> {
     match v {
         Value::String(s) => Some(s),
         Value::Object(obj) => obj.get("base").and_then(|h| h.as_str()),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Verifies the manifest hash reader accepts both plain hashes and nested base hashes.
+    #[test]
+    fn read_manifest_sha1_supports_string_and_base_object() {
+        assert_eq!(read_manifest_sha1(&Value::String("abc".into())), Some("abc"));
+        assert_eq!(read_manifest_sha1(&serde_json::json!({"base": "def"})), Some("def"));
     }
 }

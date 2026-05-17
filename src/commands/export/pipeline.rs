@@ -16,9 +16,9 @@ use crate::commands::export::consolidated_bmg::{BmgSource, ConsolidatedBmg};
 use crate::formats::bmg::Bmg;
 use crate::formats::iso::iso;
 use crate::formats::rarc::Rarc;
+use crate::utils::{read_bytes_at, sha1_hex};
 use serde_json::{json, Map, Value};
 use std::fs;
-use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
 /// A single file (non-arc) unpacked from within an ARC (or nested ARC).
@@ -48,7 +48,7 @@ pub fn export_entries(iso_path: &Path, output_dir: &Path) -> Result<Map<String, 
             .strip_prefix("files/")
             .unwrap_or(&file.path)
             .to_string();
-        let bytes = read_iso_entry_bytes(&mut iso_file, file.offset, file.size)?;
+        let bytes = read_bytes_at(&mut iso_file, file.offset, file.size)?;
 
         if file.path.ends_with(".arc") {
             // Unpack ARCs recursively - handled below
@@ -312,25 +312,6 @@ fn archive_stem(archive_iso_path: &str) -> Result<String, String> {
         .and_then(|s| s.to_str())
         .map(|s| s.to_string())
         .ok_or("Invalid arc path".to_string())
-}
-
-fn read_iso_entry_bytes(
-    file: &mut std::fs::File,
-    offset: u64,
-    size: u64,
-) -> Result<Vec<u8>, String> {
-    file.seek(SeekFrom::Start(offset))
-        .map_err(|e| format!("Failed to seek ISO data: {e}"))?;
-    let mut out = vec![0u8; size as usize];
-    file.read_exact(&mut out)
-        .map_err(|e| format!("Failed to read ISO data: {e}"))?;
-    Ok(out)
-}
-
-fn sha1_hex(bytes: &[u8]) -> String {
-    let mut hasher = sha1::Sha1::new();
-    hasher.update(bytes);
-    hasher.digest().to_string()
 }
 
 fn write_output_file(output_dir: &Path, rel_path: &str, bytes: &[u8]) -> Result<(), String> {

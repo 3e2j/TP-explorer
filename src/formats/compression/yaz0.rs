@@ -22,6 +22,16 @@ const BACKREF_COPY_LEN_EXTENDED_BASE: usize = 0x12;
 
 use crate::utils::read_u32_be;
 
+/// Decompresses a Yaz0-compressed buffer.
+///
+/// # Examples
+///
+/// ```
+/// use tpmt::formats::compression::yaz0::{yaz0_compress, yaz0_decompress};
+/// let data = b"ABABABAB";
+/// let compressed = yaz0_compress(data).unwrap();
+/// assert_eq!(yaz0_decompress(&compressed).as_deref(), Some(data.as_ref()));
+/// ```
 pub fn yaz0_decompress(input: &[u8]) -> Option<Vec<u8>> {
     if input.len() < YAZ0_HEADER_SIZE || &input[0..MAGIC_YAZ0.len()] != MAGIC_YAZ0 {
         return None;
@@ -84,6 +94,15 @@ pub fn yaz0_decompress(input: &[u8]) -> Option<Vec<u8>> {
 
 /// Yaz0 compression using LZ77-style matching.
 /// Searches for matching byte sequences and encodes them as back-references.
+/// Compresses data into Yaz0 format.
+///
+/// # Examples
+///
+/// ```
+/// use tpmt::formats::compression::yaz0::{yaz0_compress, yaz0_decompress};
+/// let compressed = yaz0_compress(b"ABABABAB").unwrap();
+/// assert_eq!(yaz0_decompress(&compressed).as_deref(), Some(b"ABABABAB".as_ref()));
+/// ```
 pub fn yaz0_compress(input: &[u8]) -> Option<Vec<u8>> {
     const MAX_RUN_LENGTH: usize = 0xFF + 0x12;
     const DEFAULT_SEARCH_DEPTH: usize = 0x1000;
@@ -200,4 +219,29 @@ fn find_match(data: &[u8], offset: usize, search_depth: usize, max_run: usize) -
     }
 
     (best_len, best_pos)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Verifies compression and decompression round-trip repeated data without corruption.
+    #[test]
+    fn yaz0_roundtrip_preserves_input_bytes() {
+        let input = b"ABABABABABABABAB".to_vec();
+        let compressed = yaz0_compress(&input).expect("compress");
+        assert_eq!(yaz0_decompress(&compressed), Some(input));
+    }
+
+    // Verifies non-Yaz0 input is rejected before the decoder touches payload bytes.
+    #[test]
+    fn yaz0_decompress_rejects_wrong_magic() {
+        assert_eq!(yaz0_decompress(b"NOTYAZ0"), None);
+    }
+
+    // Verifies the matcher prefers the longest available back-reference.
+    #[test]
+    fn find_match_prefers_longest_sequence() {
+        assert_eq!(find_match(b"AAAAAA", 1, 10, 10).0 >= 4, true);
+    }
 }

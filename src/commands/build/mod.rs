@@ -10,11 +10,11 @@ Multi-stage pipeline:
 6) Write the full build output
 */
 
-mod archive_plan;
-mod assemble;
-mod compile;
-mod hash_check;
-mod output;
+pub mod archive_plan;
+pub mod assemble;
+pub mod compile;
+pub mod hash_check;
+pub mod output;
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};

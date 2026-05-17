@@ -42,7 +42,7 @@ const FILE_ENTRY_TYPE_DIR: u8 = 0x02;
 const U32_SIZE: usize = 4;
 const INVALID_NODE_INDEX: u32 = 0xFFFF_FFFF;
 use crate::formats::compression::yaz0;
-use crate::utils::{read_u16_be, read_u32_be};
+use crate::utils::{read_u16_be, read_u32_be, write_u16_be, write_u32_be};
 
 /// Represents a directory node inside a RARC archive. Some fields are public
 /// because callers may want to inspect names or indices.
@@ -543,20 +543,6 @@ fn read_cstring(data: &[u8], start: usize) -> String {
 
 fn has_bytes(data: &[u8], offset: usize, len: usize) -> bool {
     offset.checked_add(len).is_some_and(|end| end <= data.len())
-}
-
-// Helper to write u32 big-endian
-fn write_u32_be(data: &mut [u8], offset: usize, value: u32) {
-    if offset + 4 <= data.len() {
-        data[offset..offset + 4].copy_from_slice(&value.to_be_bytes());
-    }
-}
-
-// Helper to write u16 big-endian
-fn write_u16_be(data: &mut [u8], offset: usize, value: u16) {
-    if offset + 2 <= data.len() {
-        data[offset..offset + 2].copy_from_slice(&value.to_be_bytes());
-    }
 }
 
 /// String table builder for arc repacking

@@ -13,6 +13,14 @@ pub struct RarcBuilder {
 
 impl RarcBuilder {
     /// Create a new builder with a root node.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tpmt::formats::rarc::RarcBuilder;
+    /// let rarc = RarcBuilder::new().add_file("foo.txt".to_string(), b"abc".to_vec()).build();
+    /// assert_eq!(rarc.list_files()[0].0, "foo.txt");
+    /// ```
     /// Mirrors Python's add_root_directory(): creates the ROOT node and
     /// immediately adds the mandatory "." and ".." directory entries.
     pub fn new() -> Self {
