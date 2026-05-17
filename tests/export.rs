@@ -26,6 +26,24 @@ fn write_manifest_hoists_archive_entries() {
     assert!(std::fs::read_to_string(dir.join("manifest.json")).unwrap().contains("\"archives\""));
 }
 
+// Verifies consolidated BMG sources are hoisted into the archive lookup map.
+#[test]
+fn write_manifest_hoists_consolidated_bmg_sources() {
+    let dir = common::temp_dir("manifest-bmg");
+    let mut entries = Map::new();
+    entries.insert(
+        "text/messages.json".into(),
+        json!({
+            "sources": [
+                {"archive": "files/res/Msgus/bmgres.arc", "path": "zel_00.bmg", "sha1": "abc"}
+            ]
+        }),
+    );
+    manifest::write_manifest(&dir, entries).unwrap();
+    let manifest: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join("manifest.json")).unwrap()).unwrap();
+    assert!(manifest["archives"]["files/res/Msgus/bmgres.arc"].get("zel_00.bmg").is_some());
+}
+
 // Verifies ordinary ISOs are passed through untouched so export uses the source path directly.
 #[test]
 fn prepare_for_export_returns_original_path_for_plain_iso() {

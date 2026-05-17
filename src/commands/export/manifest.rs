@@ -40,15 +40,40 @@ pub fn write_manifest(output_dir: &Path, entries: Map<String, Value>) -> Result<
     }
 
     for (friendly, val) in &entries {
-        // If entry has a path & archive originally, find which archive(s) it belongs to
-        // by checking the original entries (which included archive) via the input `entries` map.
-        if let Some(orig) = val.as_object() {
-            if let Some(archive_val) = orig.get("archive").and_then(|v| v.as_str()) {
-                archives_map
-                    .entry(archive_val.to_string())
-                    .or_insert_with(Map::new)
-                    .insert(friendly.clone(), cloned_entry_without_archive(val));
-            }
+        let Some(orig) = val.as_object() else {
+            continue;
+        };
+
+        if let Some(archive_val) = orig.get("archive").and_then(|v| v.as_str()) {
+            archives_map
+                .entry(archive_val.to_string())
+                .or_insert_with(Map::new)
+                .insert(friendly.clone(), cloned_entry_without_archive(val));
+        }
+
+        // Consolidated BMG entries store archive membership inside `sources[]`,
+        // so hoist each source into the archive map as well.
+        let Some(sources) = orig.get("sources").and_then(|v| v.as_array()) else {
+            continue;
+        };
+
+        for source in sources {
+            let Some(source_obj) = source.as_object() else {
+                continue;
+            };
+            let Some(archive_val) = source_obj.get("archive").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            let Some(source_path) = source_obj.get("path").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            archives_map
+                .entry(archive_val.to_string())
+                .or_insert_with(Map::new)
+                .insert(
+                    source_path.to_string(),
+                    cloned_entry_without_archive(source),
+                );
         }
     }
 
@@ -89,6 +114,8 @@ mod tests {
     #[test]
     fn cloned_entry_without_archive_removes_archive_field() {
         let entry = json!({"archive": "files/a.arc", "path": "foo.txt", "sha1": "abc"});
-        assert!(cloned_entry_without_archive(&entry).get("archive").is_none());
+        assert!(cloned_entry_without_archive(&entry)
+            .get("archive")
+            .is_none());
     }
 }
